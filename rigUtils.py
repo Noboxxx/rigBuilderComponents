@@ -65,6 +65,12 @@ class Ctrl(object):
             cmds.error('\'{0}\' is not a valid name.'.format(name))
         self.__name = name
 
+    def __str__(self):
+        return self.get_name()
+
+    def __repr__(self):
+        return self.get_name()
+
     @classmethod
     def is_one(cls, name):
         name = str(name)
@@ -75,11 +81,17 @@ class Ctrl(object):
         return False
 
     @classmethod
-    def create_curve(cls, name):
-        return cmds.circle(name=name)
+    def draw_curve(cls, name, axis='x', size=1):
+        if axis == 'x':
+            normal = (1, 0, 0)
+        elif axis == 'y':
+            normal = (0, 1, 0)
+        else:
+            normal = (0, 0, 1)
+        return cmds.circle(name=name, ch=False, normal=normal, radius=size)[0]
 
     @classmethod
-    def create(cls, id_=None, side=None, index=None):
+    def create(cls, id_=None, side=None, index=None, axis='x', size=1):
         name = Name.compose(id_, side, index, cls.type_)
         buffer_name = Name.compose(id_, side, index, cls.buffer_type)
 
@@ -90,7 +102,7 @@ class Ctrl(object):
             cmds.error('\'{0}\' already exists'.format(buffer_name))
 
         buffer_ = cmds.group(name=buffer_name, empty=True)
-        ctrl = cls.create_curve(name=name)
+        ctrl = cls.draw_curve(name=name, axis=axis, size=size)
 
         cmds.parent(ctrl, buffer_)
 
@@ -100,5 +112,11 @@ class Ctrl(object):
         return self.__name
 
     def get_buffer(self):
-        parents = cmds.listRelatives(self.get_name())  # Here
+        parents = cmds.listRelatives(self.get_name(), parent=True)
+
+        if parents:
+            parent = parents[0]
+            if parent.endswith(self.buffer_type):
+                return parent
+        return False
 
