@@ -1,4 +1,5 @@
 from maya import cmds
+from maya.api import OpenMaya
 
 
 class Name(object):
@@ -10,7 +11,7 @@ class Name(object):
     def __init__(self, name):
         if not self.is_one(name):
             cmds.error('\'{0}\' is not a valid name.'.format(name))
-        self.__name = name
+        self.__name = str(name)
 
     def __str__(self):
         return self.get_name()
@@ -63,7 +64,7 @@ class Ctrl(object):
     def __init__(self, name):
         if not self.is_one(name):
             cmds.error('\'{0}\' is not a valid name.'.format(name))
-        self.__name = name
+        self.__name = str(name)
 
     def __str__(self):
         return self.get_name()
@@ -103,6 +104,7 @@ class Ctrl(object):
 
         buffer_ = cmds.group(name=buffer_name, empty=True)
         ctrl = cls.draw_curve(name=name, axis=axis, size=size)
+        cmds.setAttr('{}.{}'.format(ctrl, 'v'), lock=True, keyable=False)
 
         cmds.parent(ctrl, buffer_)
 
@@ -120,3 +122,56 @@ class Ctrl(object):
                 return parent
         return False
 
+
+class Matrix(object):
+
+    def __init__(self, matrix):
+        if not self.is_one(matrix):
+            cmds.error('\'{}\' is not a valid matrix.')
+        self.__matrix = list(matrix)
+
+    @classmethod
+    def is_one(cls, matrix):
+        matrix = list(matrix)
+        if len(matrix) == 16:
+            for scalar in matrix:
+                if not isinstance(scalar, float):
+                    return False
+            return True
+        return False
+
+    def get_matrix(self):
+        return self.__matrix
+
+    def __repr__(self):
+        return self.get_matrix()
+
+    def __str__(self):
+        return str(self.__matrix)
+
+    # def __getitem__(self, item):
+    #     return self.get_matrix()[item]
+
+    def __iter__(self):
+        return iter(self.get_matrix())
+
+    @classmethod
+    def get_from_dag(cls, dag):
+        matrix = cmds.xform(dag, m=True, matrix=True)
+        return cls(matrix)
+
+    @classmethod
+    def get_from_transforms(cls, trs=(0, 0, 0, 0, 0, 0, 1, 1, 1), order=OpenMaya.MEulerRotation.kXYZ):
+        def get_meuler_rotation_from_rotation(rotation, order_=OpenMaya.MEulerRotation.kXYZ):
+            radians = [OpenMaya.MAngle(value, OpenMaya.MAngle.kDegrees).asRadians() for value in rotation]
+            return OpenMaya.MEulerRotation(radians, order=order_)
+
+        t = OpenMaya.MVector(trs[:3])
+        r = get_meuler_rotation_from_rotation(trs[3:6], order_=order)
+        s = trs[6:]
+        mtrs_matrix = OpenMaya.MTransformationMatrix()
+        mtrs_matrix.setRotation(r)
+        mtrs_matrix.setTranslation(t, OpenMaya.MSpace.kWorld)
+        mtrs_matrix.setScale(s, OpenMaya.MSpace.kWorld)
+        mmatrix = mtrs_matrix.asMatrix()
+        return cls(mmatrix)
