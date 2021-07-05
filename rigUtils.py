@@ -1,3 +1,4 @@
+from __future__ import division
 from maya import cmds
 from maya.api import OpenMaya
 
@@ -92,7 +93,7 @@ class Ctrl(object):
         return cmds.circle(name=name, ch=False, normal=normal, radius=size)[0]
 
     @classmethod
-    def create(cls, id_=None, side=None, index=None, axis='x', size=1):
+    def create(cls, id_=None, side=None, index=None, axis='x', size=1, color=None):
         name = Name.compose(id_, side, index, cls.type_)
         buffer_name = Name.compose(id_, side, index, cls.buffer_type)
 
@@ -108,7 +109,12 @@ class Ctrl(object):
 
         cmds.parent(ctrl, buffer_)
 
-        return cls(ctrl)
+        ctrl = cls(ctrl)
+
+        if color is not None:
+            ctrl.set_color(color=color)
+
+        return ctrl
 
     def get_name(self):
         return self.__name
@@ -121,6 +127,20 @@ class Ctrl(object):
             if parent.endswith(self.buffer_type):
                 return parent
         return False
+
+    def set_color(self, color):
+        color = list(color)
+
+        for shape in self.get_shapes():
+            cmds.setAttr('{}.overrideEnabled'.format(shape), True)
+            cmds.setAttr('{}.overrideRGBColors'.format(shape), 1)
+
+            cmds.setAttr('{}.overrideColorR'.format(shape), color[0])
+            cmds.setAttr('{}.overrideColorG'.format(shape), color[1])
+            cmds.setAttr('{}.overrideColorB'.format(shape), color[2])
+
+    def get_shapes(self):
+        return cmds.listRelatives(self.get_name(), shapes=True, type='nurbsCurve') or list()
 
 
 class Matrix(object):
@@ -157,7 +177,7 @@ class Matrix(object):
 
     @classmethod
     def get_from_dag(cls, dag):
-        matrix = cmds.xform(dag, m=True, matrix=True)
+        matrix = cmds.xform(dag, q=True, matrix=True, worldSpace=True)
         return cls(matrix)
 
     @classmethod
@@ -175,3 +195,64 @@ class Matrix(object):
         mtrs_matrix.setScale(s, OpenMaya.MSpace.kWorld)
         mmatrix = mtrs_matrix.asMatrix()
         return cls(mmatrix)
+
+    @classmethod
+    def blend_matrices(cls, matrix_a, matrix_b, blender=.5):
+        def blend_values(list_a, list_b, blender_):
+            result = list()
+            for a, b in zip(list_a, list_b):
+                result.append((a * (1.0 - blender_)) + (b * blender_))
+            return tuple(result)
+        matrix_a = cls(matrix_a)
+        matrix_b = cls(matrix_b)
+
+        matrix_a_translate = matrix_a.get_translation()
+        matrix_b_translate = matrix_b.get_translation()
+        matrix_result_translate = blend_values(matrix_a_translate, matrix_b_translate, blender_=blender)
+
+        matrix_a_rotation = matrix_a.get_rotation()
+        matrix_b_rotation = matrix_b.get_rotation()
+        matrix_result_rotation = blend_values(matrix_a_rotation, matrix_b_rotation, blender_=blender)
+
+        matrix_a_scale = matrix_a.get_scale()
+        matrix_b_scale = matrix_b.get_scale()
+        matrix_result_scale = blend_values(matrix_a_scale, matrix_b_scale, blender_=blender)
+
+        transforms = matrix_result_translate + matrix_result_rotation + matrix_result_scale
+        return cls.get_from_transforms(trs=transforms)
+
+    def get_translation(self):
+        mtransform_matrix = OpenMaya.MTransformationMatrix(OpenMaya.MMatrix(self.__matrix))
+        return list(mtransform_matrix.translation(OpenMaya.MSpace.kWorld))
+
+    def get_rotation(self, radians=False):
+        mtransform_matrix = OpenMaya.MTransformationMatrix(OpenMaya.MMatrix(self.__matrix))
+        rotation = mtransform_matrix.rotation()
+        if radians is True:
+            return list(rotation)
+        return [OpenMaya.MAngle(value, OpenMaya.MAngle.kRadians).asDegrees() for value in rotation]
+
+    def get_scale(self):
+        mtransform_matrix = OpenMaya.MTransformationMatrix(OpenMaya.MMatrix(self.__matrix))
+        return mtransform_matrix.scale(OpenMaya.MSpace.kObject)
+
+
+class Color(object):
+
+    red = (255/255, 0, 0)
+    dark_red = (128/255, 0, 0)
+    light_red = (255/255, 128/255, 128/255)
+
+    yellow = (255/255, 255/255, 0)
+    dark_yellow = (204/255, 153/255, 0)
+    light_yellow = (255/255, 255/255, 153/255)
+
+    blue = (0, 0, 255/255)
+    dark_blue = (0, 0, 102/255)
+    light_blue = (51/255, 153/255, 255/255)
+
+    green = (0, 255/255, 0)
+    dark_green = (0, 204/255, 0)
+    light_green = (153/255, 255/255, 204/255)
+
+    pink = (255/255, 102/255, 255/255)
