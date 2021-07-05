@@ -48,14 +48,14 @@ class MyComponent(rigBuilder.Component):
 
     def get_ctrls(self):
         ctrls = list()
-        for node in cmds.listRelatives(self.get_folder(), allDescendents=True):
+        for node in cmds.listRelatives(self.get_folder(), allDescendents=True) or list():
             if rigUtils.Ctrl.is_one(node):
                 ctrls.append(rigUtils.Ctrl(node))
         return ctrls
 
     def get_skin_joints(self):
         skin_joints = list()
-        for node in cmds.listRelatives(self.get_folder(), allDescendents=True):
+        for node in cmds.listRelatives(self.get_folder(), allDescendents=True) or list():
             if node.endswith('_skin') and cmds.objectType(node, isAType='joint'):
                 skin_joints.append(node)
         return skin_joints
@@ -169,5 +169,34 @@ class FkChain(MyComponent):
             else:
                 cmds.parent(ctrl.get_buffer(), ctrls[i-1])
             ctrls.append(ctrl)
+
+        return cls.create_folder(dags=dags, name=name)
+
+    def get_ctrls(self):
+        id_, side, index, type_ = rigUtils.Name.split(self.get_folder())
+        ctrls_name_pattern = rigUtils.Name.compose('{}_fk*'.format(id_), side, index, 'ctrl')
+        ctrls = [rigUtils.Ctrl(ctrl) for ctrl in cmds.ls(ctrls_name_pattern) or list()]
+        return ctrls
+
+
+class HybridChain(MyComponent):
+
+    @classmethod
+    def create(cls, id_=None, side=None, index=None, matrices=None, size=1, color=None, axis='x'):
+        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
+        dags = list()
+
+        points = [matrix.get_translation() for matrix in matrices]
+        degree = 2
+        knots = range(len(points) + degree - 1)
+        curve_name = 'curve#'
+        curve = cmds.curve(
+            degree=degree,
+            point=points,
+            knot=knots,
+            name=curve_name,
+        )
+
+        dags.append(curve)
 
         return cls.create_folder(dags=dags, name=name)
