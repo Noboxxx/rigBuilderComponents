@@ -169,9 +169,6 @@ class Matrix(object):
     def __str__(self):
         return str(self.__matrix)
 
-    # def __getitem__(self, item):
-    #     return self.get_matrix()[item]
-
     def __iter__(self):
         return iter(self.get_matrix())
 
@@ -235,6 +232,19 @@ class Matrix(object):
     def get_scale(self):
         mtransform_matrix = OpenMaya.MTransformationMatrix(OpenMaya.MMatrix(self.__matrix))
         return mtransform_matrix.scale(OpenMaya.MSpace.kObject)
+
+    def get_mirror(self):
+        translation = self.get_translation()
+        rotation = self.get_rotation()
+        scale = self.get_scale()
+
+        trs = (
+            translation[0] * -1, translation[1], translation[2],
+            180 - rotation[0], rotation[1], 180 - rotation[2],
+            scale[0], scale[1] , scale[2],
+        )
+
+        return self.get_from_transforms(trs)
 
 
 class Color(object):

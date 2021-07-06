@@ -60,19 +60,6 @@ class WorldLocal(MyComponent):
         ctrls.append(local_ctrl)
 
         return cls.create_folder(dags=dags, name=name, roots=roots, ctrls=ctrls, ends=ends, skin_joints=skin_joints)
-    #
-    # def get_local_ctrl(self):
-    #     id_, side, index, type_ = componentUtils.Name.split(self.get_folder())
-    #     ctrl_name = componentUtils.Name.compose('{}_{}'.format(id_, self.local_prefix), side, index, 'ctrl')
-    #     return componentUtils.Ctrl(ctrl_name)
-    #
-    # def get_world_ctrl(self):
-    #     id_, side, index, type_ = componentUtils.Name.split(self.get_folder())
-    #     ctrl_name = componentUtils.Name.compose('{}_{}'.format(id_, self.world_prefix), side, index, 'ctrl')
-    #     return componentUtils.Ctrl(ctrl_name)
-    #
-    # def connect_to_local_ctrl(self, child):
-    #     self.connect(self.get_local_ctrl(), child)
 
 
 class OneCtrl(MyComponent):
@@ -119,14 +106,6 @@ class OneCtrl(MyComponent):
         roots.append(ctrl.get_buffer())
 
         return cls.create_folder(dags=dags, name=name, ctrls=ctrls, ends=ends, roots=roots, skin_joints=skin_joints)
-    #
-    # def get_ctrl(self):
-    #     id_, side, index, type_ = componentUtils.Name.split(self.get_folder())
-    #     ctrl_name = componentUtils.Name.compose(id_, side, index, 'ctrl')
-    #     return componentUtils.Ctrl(ctrl_name)
-    #
-    # def connect_to_ctrl(self, child):
-    #     self.connect(self.get_ctrl(), child)
 
 
 class FkChain(MyComponent):
@@ -139,8 +118,8 @@ class FkChain(MyComponent):
 
         ctrls = list()
         for i, matrix in enumerate(matrices):
-            ctrl = componentUtils.Ctrl.create(id_='{}_fk{}'.format(id_, i), side=side, index=index, axis=axis, size=size, color=color)
-            joint_name = componentUtils.Name.compose('{}_fk{}'.format(id_, i), side, index, 'skin')
+            ctrl = componentUtils.Ctrl.create(id_='{}_fk_{}'.format(id_, i), side=side, index=index, axis=axis, size=size, color=color)
+            joint_name = componentUtils.Name.compose('{}_fk_{}'.format(id_, i), side, index, 'skin')
             cmds.select(clear=True)
             joint = cmds.joint(name=joint_name)
             cmds.parent(joint, ctrl)
@@ -152,12 +131,6 @@ class FkChain(MyComponent):
             ctrls.append(ctrl)
 
         return cls.create_folder(dags=dags, name=name)
-    #
-    # def get_ctrls(self):
-    #     id_, side, index, type_ = componentUtils.Name.split(self.get_folder())
-    #     ctrls_name_pattern = componentUtils.Name.compose('{}_fk*'.format(id_), side, index, 'ctrl')
-    #     ctrls = [componentUtils.Ctrl(ctrl) for ctrl in cmds.ls(ctrls_name_pattern) or list()]
-    #     return ctrls
 
 
 class HybridChain(MyComponent):
@@ -189,6 +162,7 @@ class HybridChain(MyComponent):
             joint_name = componentUtils.Name.compose('{}_{}'.format(id_, i), side, index, 'skin')
             joint = cmds.joint(p=(closest_point.x, closest_point.y, closest_point.z), name=joint_name)
             joints.append(joint)
+            skin_joints.append(joint)
         cmds.joint(
             joints[0],
             e=True,
@@ -222,7 +196,7 @@ class HybridChain(MyComponent):
         ik_joints = list()
         for i, joint in enumerate((joints[0], joints[-1])):
             ik_ctrl = componentUtils.Ctrl.create(
-                id_='{}_ik{}'.format(id_, i),
+                id_='{}_ik_{}'.format(id_, i),
                 side=side,
                 index=index,
                 size=size,
@@ -231,7 +205,8 @@ class HybridChain(MyComponent):
             )
             # Create curve's joint
             cmds.select(clear=True)
-            ik_joint = cmds.joint()
+            ik_joint_name = componentUtils.Name.compose('{}_ik_{}'.format(id_, i), side, index, 'jnt')
+            ik_joint = cmds.joint(name=ik_joint_name)
             ik_joints.append(ik_joint)
             cmds.parent(ik_joint, ik_ctrl)
 
@@ -270,4 +245,65 @@ class HybridChain(MyComponent):
 
         roots.append(ik_ctrls[0])
 
+        return cls.create_folder(dags=dags, name=name, skin_joints=skin_joints, ctrls=ctrls, ends=ends, roots=roots)
+
+
+class TwoSegmentsLimb(MyComponent):
+
+    @classmethod
+    def create(cls, id_=None, side=None, index=None, matrices=None, size=1, fk_color=None, ik_color=None):
+        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
+
+        dags = list()
+        roots = list()
+        ends = list()
+        skin_joints = list()
+        ctrls = list()
+
+        ###
+        if len(matrices) != 3:
+            cmds.error('Got () matrices. Need exactly 3.'.format(len(matrices)))
+
+        # draw skin joints
+        joints = list()
+        for i, matrix in enumerate(matrices):
+            cmds.select(clear=True)
+            joint_name = componentUtils.Name.compose('{}_{}'.format(id_, i), side, index, 'skin')
+            joint = cmds.joint(name=joint_name)
+            cmds.xform(joint, matrix=list(matrix))
+            skin_joints.append(joint)
+            joints.append(joint)
+            if i != 0:
+                cmds.parent(joint, joints[i - 1])
+
+        dags.append(joints[0])
+
+        # draw ik joints
+        ik_joints = list()
+        for i, matrix in enumerate(matrices):
+            cmds.select(clear=True)
+            ik_joint_name = componentUtils.Name.compose('{}_ik_{}'.format(id_, i), side, index, 'jnt')
+            ik_joint = cmds.joint(name=ik_joint_name)
+            cmds.xform(ik_joint, matrix=list(matrix))
+            ik_joints.append(ik_joint)
+            if i != 0:
+                cmds.parent(ik_joint, ik_joints[i - 1])
+
+        dags.append(ik_joints[0])
+
+        # ik handle
+        ik_handle_name = 'ikHandle#'
+        # ik_handle, _ = cmds.ikHandle(
+        #     name=ik_handle_name,
+        #     solver='ikRPsolver',
+        #     startJoint=ik_joints[0],
+        #     endEffector=ik_joints[-1],
+        # )
+
+        # Connect ik chain to skin_chain
+        for ik_joint, skin_joint in zip(ik_joints, skin_joints):
+            for attr in ('t', 'r', 's'):
+                cmds.connectAttr('{}.{}'.format(ik_joint, attr), '{}.{}'.format(skin_joint, attr))
+
+        ###
         return cls.create_folder(dags=dags, name=name, skin_joints=skin_joints, ctrls=ctrls, ends=ends, roots=roots)
