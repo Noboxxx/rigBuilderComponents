@@ -256,3 +256,17 @@ class Color(object):
     light_green = (153/255, 255/255, 204/255)
 
     pink = (255/255, 102/255, 255/255)
+
+
+class Utils(object):
+
+    @classmethod
+    def get_mfn(cls, node):
+        node = str(node)
+        selection_list = OpenMaya.MSelectionList()
+        selection_list.add(node)
+        mobject = selection_list.getDependNode(0)
+        try:
+            return eval('OpenMaya.MFn{0}(mobject)'.format(mobject.apiTypeStr[1:]))
+        except AttributeError:
+            return mobject
