@@ -83,17 +83,40 @@ class Ctrl(object):
         return False
 
     @classmethod
-    def draw_curve(cls, name, axis='x', size=1):
-        if axis == 'x':
-            normal = (1, 0, 0)
-        elif axis == 'y':
-            normal = (0, 1, 0)
-        else:
-            normal = (0, 0, 1)
-        return cmds.circle(name=name, ch=False, normal=normal, radius=size)[0]
+    def draw_curve(cls, name, axis='x', size=1, shape=None):
+        shape = Shape.square if shape is None else shape
+
+        scaled_points = list()
+        for point in shape['points']:
+            result = (
+                point[0] * size,
+                point[1] * size,
+                point[2] * size
+            )
+            scaled_points.append(result)
+
+        oriented_points = list()
+        for point in scaled_points:
+            if axis == 'y':
+                result = point
+            elif axis == 'x':
+                result = (
+                    point[1],
+                    point[2],
+                    point[0],
+                )
+            else:
+                result = (
+                    point[2],
+                    point[1],
+                    point[0],
+                )
+            oriented_points.append(result)
+
+        return cmds.curve(point=oriented_points, degree=shape['degree'], name=name)
 
     @classmethod
-    def create(cls, id_=None, side=None, index=None, axis='x', size=1, color=None):
+    def create(cls, id_=None, side=None, index=None, axis='x', size=1, color=None, shape=None):
         name = Name.compose(id_, side, index, cls.type_)
         buffer_name = Name.compose(id_, side, index, cls.buffer_type)
 
@@ -104,7 +127,7 @@ class Ctrl(object):
             cmds.error('\'{0}\' already exists'.format(buffer_name))
 
         buffer_ = cmds.group(name=buffer_name, empty=True)
-        ctrl = cls.draw_curve(name=name, axis=axis, size=size)
+        ctrl = cls.draw_curve(name=name, axis=axis, size=size, shape=shape)
         cmds.setAttr('{}.{}'.format(ctrl, 'v'), lock=True, keyable=False)
 
         cmds.parent(ctrl, buffer_)
@@ -266,6 +289,23 @@ class Color(object):
     light_green = (153/255, 255/255, 204/255)
 
     pink = (255/255, 102/255, 255/255)
+
+
+class Shape(object):
+
+    square = {
+        'points': ((.5, 0, .5), (-.5, 0, .5), (-.5, 0, -.5), (.5, 0, -.5), (.5, 0, .5)),
+        'degree': 1,
+    }
+    cube = {
+        'points': ((0.5, 0.5, 0.5), (0.5, 0.5, -0.5), (0.5, -0.5, -0.5), (0.5, -0.5, 0.5), (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5), (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5), (0.5, -0.5, -0.5), (-0.5, -0.5, -0.5), (-0.5, -0.5, 0.5), (-0.5, 0.5, 0.5), (-0.5, 0.5, -0.5), (-0.5, -0.5, -0.5), (-0.5, 0.5, -0.5), (0.5, 0.5, -0.5)),
+        'degree': 1,
+    }
+
+    # circle = {
+    #     'points': ((6.78573232311e-17, 6.78573232311e-17, -1.10819418755), (-0.783611624891, 4.79823734099e-17, -0.783611624891), (-1.10819418755, 3.51773561901e-33, -5.74489823752e-17), (-0.783611624891, -4.79823734099e-17, 0.783611624891), (-1.11008569696e-16, -6.78573232311e-17, 1.10819418755), (0.783611624891, -4.79823734099e-17, 0.783611624891), (1.10819418755, -9.25367921011e-33, 1.51124050078e-16), (0.783611624891, 4.79823734099e-17, -0.783611624891), (6.78573232311e-17, 6.78573232311e-17, -1.10819418755),),
+    #     'degree': 3,
+    # }
 
 
 class Utils(object):

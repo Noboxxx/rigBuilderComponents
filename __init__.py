@@ -174,8 +174,9 @@ class HybridChain(MyComponent):
         for axis in ('X', 'Y', 'Z'):
             cmds.setAttr('{}.jointOrient{}'.format(joints[-1], axis), 0)
 
+        ends.append(joints[-1])
         dags.append(joints[0])
-        
+
         # Create ik spine
         ik_handle_name = componentUtils.Name.compose(id_, side, index, 'ikHandle')
         ik_handle, _ = cmds.ikHandle(
@@ -203,6 +204,7 @@ class HybridChain(MyComponent):
                 axis='y',
                 color=ik_color,
             )
+            ctrls.append(ik_ctrl)
             # Create curve's joint
             cmds.select(clear=True)
             ik_joint_name = componentUtils.Name.compose('{}_ik_{}'.format(id_, i), side, index, 'jnt')
@@ -231,6 +233,7 @@ class HybridChain(MyComponent):
                 color=fk_color,
                 size=size
             )
+            ctrls.append(fk_ctrl)
             joint_matrix = cmds.xform(joint, q=True, matrix=True, worldSpace=True)
             cmds.xform(fk_ctrl.get_buffer(), matrix=joint_matrix)
             fk_ctrls.append(fk_ctrl)
@@ -251,6 +254,20 @@ class HybridChain(MyComponent):
 class TwoSegmentsLimb(MyComponent):
 
     @classmethod
+    def create_chain(cls, id_, side, index, type_, matrices):
+        joints = list()
+        for i, matrix in enumerate(matrices):
+            cmds.select(clear=True)
+            joint_name = componentUtils.Name.compose('{}_{}'.format(id_, i), side, index, type_)
+            joint = cmds.joint(name=joint_name)
+            cmds.xform(joint, matrix=list(matrix))
+            joints.append(joint)
+            if i != 0:
+                cmds.parent(joint, joints[i - 1])
+        cmds.makeIdentity(joints[0], apply=True, translate=False, rotate=True, scale=False, normal=False, pn=True)
+        return joints
+
+    @classmethod
     def create(cls, id_=None, side=None, index=None, matrices=None, size=1, fk_color=None, ik_color=None):
         name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
 
@@ -265,40 +282,38 @@ class TwoSegmentsLimb(MyComponent):
             cmds.error('Got () matrices. Need exactly 3.'.format(len(matrices)))
 
         # draw skin joints
-        joints = list()
-        for i, matrix in enumerate(matrices):
-            cmds.select(clear=True)
-            joint_name = componentUtils.Name.compose('{}_{}'.format(id_, i), side, index, 'skin')
-            joint = cmds.joint(name=joint_name)
-            cmds.xform(joint, matrix=list(matrix))
-            skin_joints.append(joint)
-            joints.append(joint)
-            if i != 0:
-                cmds.parent(joint, joints[i - 1])
+        joints = cls.create_chain(id_, side, index, 'skin', matrices)
+        ik_joints = cls.create_chain('{}_{}'.format(id_, 'ik'), side, index, 'jnt', matrices)
 
-        dags.append(joints[0])
+        joints_grp_name = componentUtils.Name.compose('{}_{}'.format(id_, 'joints'), side, index, 'grp')
+        joints_grp = cmds.group(empty=True, name=joints_grp_name)
+        cmds.xform(joints_grp, matrix=list(matrices[0]))
+        cmds.parent(joints[0], ik_joints[0], joints_grp)
 
-        # draw ik joints
-        ik_joints = list()
-        for i, matrix in enumerate(matrices):
-            cmds.select(clear=True)
-            ik_joint_name = componentUtils.Name.compose('{}_ik_{}'.format(id_, i), side, index, 'jnt')
-            ik_joint = cmds.joint(name=ik_joint_name)
-            cmds.xform(ik_joint, matrix=list(matrix))
-            ik_joints.append(ik_joint)
-            if i != 0:
-                cmds.parent(ik_joint, ik_joints[i - 1])
-
-        dags.append(ik_joints[0])
+        dags.append(joints_grp)
+        skin_joints += joints
+        ends.append(joints[-1])
+        roots.append(joints_grp)
 
         # ik handle
-        ik_handle_name = 'ikHandle#'
-        # ik_handle, _ = cmds.ikHandle(
-        #     name=ik_handle_name,
-        #     solver='ikRPsolver',
-        #     startJoint=ik_joints[0],
-        #     endEffector=ik_joints[-1],
-        # )
+        ik_handle_name = componentUtils.Name.compose(id_, side, index, 'ikHandle')
+        ik_handle, _ = cmds.ikHandle(
+            name=ik_handle_name,
+            solver='ikRPsolver',
+            startJoint=ik_joints[0],
+            endEffector=ik_joints[-1],
+        )
+
+        dags.append(ik_handle)
+
+        # Ik arm ctrl
+        ik_arm_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, 'ik'), side=side, index=index, size=size, color=ik_color, shape=componentUtils.Shape.cube)
+        cmds.xform(ik_arm_ctrl.get_buffer(), matrix=list(matrices[-1]))
+        cls.connect(ik_arm_ctrl, ik_handle)
+
+        dags.append(ik_arm_ctrl.get_buffer())
+        ctrls.append(ik_arm_ctrl)
+        roots.append(ik_arm_ctrl.get_buffer())
 
         # Connect ik chain to skin_chain
         for ik_joint, skin_joint in zip(ik_joints, skin_joints):
