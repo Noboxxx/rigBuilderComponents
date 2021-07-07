@@ -278,8 +278,8 @@ class TwoSegmentsLimb(MyComponent):
         ctrls = list()
 
         ###
-        if len(matrices) != 3:
-            cmds.error('Got () matrices. Need exactly 3.'.format(len(matrices)))
+        if len(matrices) != 4:
+            cmds.error('Got () matrices. Need exactly 4.'.format(len(matrices)))
 
         # draw skin joints
         joints = cls.create_chain(id_, side, index, 'skin', matrices)
@@ -301,14 +301,14 @@ class TwoSegmentsLimb(MyComponent):
             name=ik_handle_name,
             solver='ikRPsolver',
             startJoint=ik_joints[0],
-            endEffector=ik_joints[-1],
+            endEffector=ik_joints[-2],
         )
 
         dags.append(ik_handle)
 
         # Ik arm ctrl
         ik_arm_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, 'ik'), side=side, index=index, size=size, color=ik_color, shape=componentUtils.Shape.cube)
-        cmds.xform(ik_arm_ctrl.get_buffer(), matrix=list(matrices[-1]))
+        cmds.xform(ik_arm_ctrl.get_buffer(), matrix=list(matrices[-2]))
         cls.connect(ik_arm_ctrl, ik_handle)
 
         dags.append(ik_arm_ctrl.get_buffer())
