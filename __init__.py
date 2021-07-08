@@ -306,10 +306,22 @@ class TwoSegmentsLimb(MyComponent):
 
         dags.append(ik_handle)
 
+        # ik handle hand
+        ik_handle_hand_name = componentUtils.Name.compose(id_, side, index, 'ikHandle')
+        ik_handle_hand, _ = cmds.ikHandle(
+            name=ik_handle_hand_name,
+            solver='ikSCsolver',
+            startJoint=ik_joints[-2],
+            endEffector=ik_joints[-1],
+        )
+
+        dags.append(ik_handle)
+
         # Ik arm ctrl
         ik_arm_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, 'ik'), side=side, index=index, size=size, color=ik_color, shape=componentUtils.Shape.cube)
         cmds.xform(ik_arm_ctrl.get_buffer(), matrix=list(matrices[-2]))
         cls.connect(ik_arm_ctrl, ik_handle)
+        cls.connect(ik_arm_ctrl, ik_handle_hand)
 
         dags.append(ik_arm_ctrl.get_buffer())
         ctrls.append(ik_arm_ctrl)
