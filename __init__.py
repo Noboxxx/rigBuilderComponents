@@ -65,7 +65,7 @@ class WorldLocal(MyComponent):
 class OneCtrl(MyComponent):
 
     @classmethod
-    def create(cls, id_=None, side=None, index=None, matrix=None, size=1, add_joint=False, color=None, axis='x', lock_attrs=None):
+    def create(cls, id_=None, side=None, index=None, matrix=None, size=1, add_joint=False, color=None, axis='x', lock_attrs=None, shape=None):
         name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
 
         dags = list()
@@ -80,7 +80,8 @@ class OneCtrl(MyComponent):
             index=index,
             axis=axis,
             size=size,
-            color=color
+            color=color,
+            shape=shape
         )
 
         if add_joint:
@@ -115,6 +116,9 @@ class FkChain(MyComponent):
         name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
 
         dags = list()
+        roots = list()
+        ends = list()
+        skin_joints = list()
 
         ctrls = list()
         for i, matrix in enumerate(matrices):
@@ -122,6 +126,7 @@ class FkChain(MyComponent):
             joint_name = componentUtils.Name.compose('{}_fk_{}'.format(id_, i), side, index, 'skin')
             cmds.select(clear=True)
             joint = cmds.joint(name=joint_name)
+            skin_joints.append(joint)
             cmds.parent(joint, ctrl)
             cmds.xform(ctrl.get_buffer(), matrix=list(matrix))
             if i == 0:
@@ -129,8 +134,11 @@ class FkChain(MyComponent):
             else:
                 cmds.parent(ctrl.get_buffer(), ctrls[i-1])
             ctrls.append(ctrl)
+            ends.append(ctrl)
 
-        return cls.create_folder(dags=dags, name=name)
+        roots.append(ctrls[0].get_buffer())
+
+        return cls.create_folder(dags=dags, name=name, roots=roots, ends=ends, skin_joints=skin_joints, ctrls=ctrls)
 
 
 class HybridChain(MyComponent):
@@ -218,7 +226,7 @@ class HybridChain(MyComponent):
 
             ik_ctrls.append(ik_ctrl)
 
-        cls.connect(ik_ctrls[0], joints[0])
+        componentUtils.Utils.matrix_constraint(ik_ctrls[0], joints[0], maintain_offset=True)
 
         # Skin the curve
         cmds.skinCluster(ik_joints, curve)
@@ -320,8 +328,8 @@ class TwoSegmentsLimb(MyComponent):
         # Ik arm ctrl
         ik_arm_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, 'ik'), side=side, index=index, size=size, color=ik_color, shape=componentUtils.Shape.cube)
         cmds.xform(ik_arm_ctrl.get_buffer(), matrix=list(matrices[-2]))
-        cls.connect(ik_arm_ctrl, ik_handle)
-        cls.connect(ik_arm_ctrl, ik_handle_hand)
+        componentUtils.Utils.matrix_constraint(ik_arm_ctrl, ik_handle, maintain_offset=True)
+        componentUtils.Utils.matrix_constraint(ik_arm_ctrl, ik_handle_hand, maintain_offset=True)
 
         dags.append(ik_arm_ctrl.get_buffer())
         ctrls.append(ik_arm_ctrl)

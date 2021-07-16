@@ -107,9 +107,9 @@ class Ctrl(object):
                 )
             else:
                 result = (
+                    point[0],
                     point[2],
                     point[1],
-                    point[0],
                 )
             oriented_points.append(result)
 
@@ -310,3 +310,37 @@ class Utils(object):
             return eval('OpenMaya.MFn{0}(mobject)'.format(mobject.apiTypeStr[1:]))
         except AttributeError:
             return mobject
+
+    @classmethod
+    def matrix_constraint(cls, parent, child, translate=True, rotate=True, scale=True, shear=True, maintain_offset=False, force=False, inverse_parent=True):
+        parent = str(parent)
+        child = str(child)
+        mult = cmds.createNode('multMatrix')
+        cmds.connectAttr(parent + '.worldMatrix', mult + '.matrixIn[1]')
+
+        if maintain_offset:
+            parent_world_inverse_matrix = cmds.getAttr(parent + '.worldInverseMatrix[0]')
+            child_world_matrix = cmds.getAttr(child + '.worldMatrix[0]')
+            offset_matrix = OpenMaya.MMatrix(child_world_matrix) * OpenMaya.MMatrix(parent_world_inverse_matrix)
+            cmds.setAttr(mult + '.matrixIn[0]', offset_matrix, type='matrix')
+
+        decompose_matrix = cmds.createNode('decomposeMatrix')
+        cmds.connectAttr(mult + '.matrixSum', decompose_matrix + '.inputMatrix')
+
+        if inverse_parent:
+            cmds.connectAttr('{}.{}'.format(child, 'parentInverseMatrix[0]'), '{}.{}'.format(mult, 'matrixIn[2]'))
+
+        if translate:
+            cmds.connectAttr(decompose_matrix + '.outputTranslate', child + '.t', force=force)
+        if rotate:
+            cmds.connectAttr(decompose_matrix + '.outputRotate', child + '.r', force=force)
+        if scale:
+            cmds.connectAttr(decompose_matrix + '.outputScale', child + '.s', force=force)
+        if shear:
+            cmds.connectAttr(decompose_matrix + '.outputShear', child + '.shear', force=force)
+
+        if cmds.objectType(child) == 'joint':
+            for axis in ('x', 'y', 'z'):
+                cmds.setAttr(child + '.jointOrient' + axis.upper(), 0)
+
+        return mult
