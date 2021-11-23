@@ -1,344 +1,201 @@
 import rigBuilder
-from . import componentUtils
 from maya import cmds
-from maya.api import OpenMaya
+
+# Parameters #
 
 
-class MyComponent(rigBuilder.Component):
-    default_side = 'C'
-    default_index = 0
-    type_ = 'component'
+class ShortType(object):
 
-    @classmethod
-    def compose_folder_name(cls, id_=None, side=None, index=None):
-        id_ = cls.__name__.lower() if id_ is None else str(id_)
-        side = cls.default_side if side is None else str(side)
-        index = cls.default_index if index is None else int(index)
-
-        name = componentUtils.Name.compose(id_=id_, side=side, index=index, type_=cls.type_)
-        if cmds.objExists(name):
-            cmds.error('\'{}\' already exists.'.format(name))
-
-        return name, id_, side, index
+    skinJoint = 'skn'
+    joint = 'jnt'
+    ctrl = 'ctl'
+    ctrlBuffer = 'ctrlBuffer'
+    buffer = 'rst'
+    component = 'cmp'
 
 
-class WorldLocal(MyComponent):
+class Side(object):
 
-    local_prefix = 'local'
-    world_prefix = 'world'
+    left = 'L'
+    right = 'R'
+    center = 'C'
 
-    @classmethod
-    def create(cls, id_=None, side=None, index=None, matrix=None, size=1, add_joint=False):
-        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
+    mirrorTable = {
+        left: right,
+        right: left,
+        center: None,
+    }
 
-        dags = list()
-        roots = list()
-        ctrls = list()
-        ends = list()
-        skin_joints = list()
+    def __init__(self, name):
+        name = str(name)
 
-        world_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, cls.world_prefix), side=side, index=index, axis='y', size=size * 1.4, color=componentUtils.Color.yellow)
-        local_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, cls.local_prefix), side=side, index=index, axis='y', size=size, color=componentUtils.Color.light_yellow)
-        cmds.parent(local_ctrl.get_buffer(), world_ctrl)
+        if name not in self.mirrorTable.keys():
+            raise ValueError('name not in {} -> {}'.format(self.mirrorTable.keys(), name))
 
-        if add_joint:
-            joint_name = componentUtils.Name.compose(id_='{}_local'.format(id_), side=side, index=index, type_='skin')
-            cmds.select(clear=True)
-            joint = cmds.joint(name=joint_name)
-            cmds.parent(joint, local_ctrl)
-            skin_joints.append(joint)
+        self.name = name
 
-        dags.append(world_ctrl.get_buffer())
+    def __str__(self):
+        return self.name
 
-        if matrix:
-            cmds.xform(world_ctrl.get_buffer(), matrix=list(matrix))
+    def __repr__(self):
+        return repr(self.name)
 
-        roots.append(world_ctrl.get_buffer())
-        ends.append(local_ctrl)
-
-        ctrls.append(world_ctrl)
-        ctrls.append(local_ctrl)
-
-        return cls.create_folder(dags=dags, name=name, roots=roots, ctrls=ctrls, ends=ends, skin_joints=skin_joints)
+    def __mirror__(self):  # type: () -> None or Side
+        return self.__class__(self.mirrorTable[self.name])
 
 
-class OneCtrl(MyComponent):
+class Index(object):
 
-    @classmethod
-    def create(cls, id_=None, side=None, index=None, matrix=None, size=1, add_joint=False, color=None, axis='x', lock_attrs=None, shape=None):
-        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
+    def __init__(self, value):
+        value = int(value)
 
-        dags = list()
-        ctrls = list()
-        ends = list()
-        roots = list()
-        skin_joints = list()
+        if value < 0:
+            raise ValueError('Index should be positive -> {}'.format(value))
 
-        ctrl = componentUtils.Ctrl.create(
-            id_=id_,
-            side=side,
-            index=index,
-            axis=axis,
-            size=size,
-            color=color,
-            shape=shape
+        self.value = value
+
+    def __str__(self):
+        return str(self.value)
+
+    def __repr__(self):
+        return repr(self.value)
+
+
+class Vector(object):
+
+    def __init__(self, x=0.0, y=0.0, z=0.0, w=0.0):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.w = w
+
+    def aslist(self):
+        return [self.x, self.y, self.z, self.w]
+
+
+class Matrix(object):
+
+    def __init__(
+            self,
+            vectorX=Vector(1.0, 0.0, 0.0, 0.0),
+            vectorY=Vector(0.0, 1.0, 0.0, 0.0),
+            vectorZ=Vector(0.0, 0.0, 1.0, 0.0),
+            vectorP=Vector(0.0, 0.0, 0.0, 1.0),
+            mirrorAxis='x'
+    ):
+        self.vectorX = vectorX
+        self.vectorY = vectorY
+        self.vectorZ = vectorZ
+        self.vectorP = vectorP
+
+        self.mirrorAxis = mirrorAxis
+
+    def aslist(self):
+        return self.vectorX.aslist() + self.vectorY.aslist() + self.vectorZ.aslist() + self.vectorP.aslist()
+
+    def __mirror__(self):
+        vectorP = Vector(*self.vectorP.aslist())
+        vectorP.x *= -1
+        return self.__class__(
+            self.vectorX,
+            self.vectorY,
+            self.vectorZ,
+            vectorP,
+            self.mirrorAxis
         )
 
-        if add_joint:
-            joint_name = componentUtils.Name.compose(id_=id_, side=side, index=index, type_='skin')
-            cmds.select(clear=True)
-            joint = cmds.joint(name=joint_name)
-            cmds.parent(joint, ctrl)
-            skin_joints.append(joint)
-        
-        if lock_attrs is not None:
-            for lock_attr in lock_attrs:
-                plug = '{}.{}'.format(ctrl, lock_attr)
-                if cmds.objExists(plug):
-                    cmds.setAttr(plug, lock=True, keyable=False)
-        
-        dags.append(ctrl.get_buffer())
 
-        if matrix:
-            cmds.xform(ctrl.get_buffer(), matrix=list(matrix))
-
-        ctrls.append(ctrl)
-        ends.append(ctrl)
-        roots.append(ctrl.get_buffer())
-
-        return cls.create_folder(dags=dags, name=name, ctrls=ctrls, ends=ends, roots=roots, skin_joints=skin_joints)
+# Components #
 
 
-class FkChain(MyComponent):
+class RMayaComponent(rigBuilder.RBaseComponent):
+    folderNamePattern = '{name}_{side}_{index}_{shortType}'
 
-    @classmethod
-    def create(cls, id_=None, side=None, index=None, matrices=None, size=1, color=None, axis='x'):
-        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
+    def __init__(self, name='untitled', side=Side('C'), index=Index(0)):  # type: (str, Side, Index) -> None
+        super(RMayaComponent, self).__init__()
 
-        dags = list()
-        roots = list()
-        ends = list()
-        skin_joints = list()
+        self.name = name
+        self.side = side
+        self.index = index
 
-        ctrls = list()
-        for i, matrix in enumerate(matrices):
-            ctrl = componentUtils.Ctrl.create(id_='{}_fk_{}'.format(id_, i), side=side, index=index, axis=axis, size=size, color=color)
-            joint_name = componentUtils.Name.compose('{}_fk_{}'.format(id_, i), side, index, 'skin')
-            cmds.select(clear=True)
-            joint = cmds.joint(name=joint_name)
-            skin_joints.append(joint)
-            cmds.parent(joint, ctrl)
-            cmds.xform(ctrl.get_buffer(), matrix=list(matrix))
-            if i == 0:
-                dags.append(ctrl.get_buffer())
-            else:
-                cmds.parent(ctrl.get_buffer(), ctrls[i-1])
-            ctrls.append(ctrl)
-            ends.append(ctrl)
+        self.folder = None
+        self.rootDags = list()
+        self.skinJoints = list()
 
-        roots.append(ctrls[0].get_buffer())
-
-        return cls.create_folder(dags=dags, name=name, roots=roots, ends=ends, skin_joints=skin_joints, ctrls=ctrls)
-
-
-class HybridChain(MyComponent):
-
-    @classmethod
-    def create(cls, id_=None, side=None, index=None, matrices=None, size=1, fk_color=None, ik_color=None, axis='x'):
-        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
-        dags = list()
-        roots = list()
-        ends = list()
-        skin_joints = list()
-        ctrls = list()
-
-        # Create curve
-        points = [matrix.get_translation() for matrix in matrices]
-        curve_name = componentUtils.Name.compose(id_, side, index, 'ikCurve')
-        curve = cmds.curve(point=points, name=curve_name, degree=3)
-        for shape in cmds.listRelatives(curve, shapes=True):
-            cmds.rename(shape, curve + 'Shape')
-
-        dags.append(curve)
-
-        # Create joint chain
-        cmds.select(clear=True)
-        mcurve = componentUtils.Utils.get_mfn(curve + 'Shape')
-        joints = list()
-        for i, point in enumerate(points):
-            closest_point, _ = mcurve.closestPoint(OpenMaya.MPoint(point))
-            joint_name = componentUtils.Name.compose('{}_{}'.format(id_, i), side, index, 'skin')
-            joint = cmds.joint(p=(closest_point.x, closest_point.y, closest_point.z), name=joint_name)
-            joints.append(joint)
-            skin_joints.append(joint)
-        cmds.joint(
-            joints[0],
-            e=True,
-            orientJoint='xyz',
-            secondaryAxisOrient='zdown',
-            children=True,
-            zeroScaleOrient=True
-        )
-        for axis in ('X', 'Y', 'Z'):
-            cmds.setAttr('{}.jointOrient{}'.format(joints[-1], axis), 0)
-
-        ends.append(joints[-1])
-        dags.append(joints[0])
-
-        # Create ik spine
-        ik_handle_name = componentUtils.Name.compose(id_, side, index, 'ikHandle')
-        ik_handle, _ = cmds.ikHandle(
-            name=ik_handle_name,
-            solver='ikSplineSolver',
-            createCurve=False,
-            rootOnCurve=False,
-            parentCurve=False,
-            startJoint=joints[0],
-            endEffector=joints[-1],
-            curve=curve
+    def composeName(self, shortType, nameExtra=None):
+        name = '{}_{}'.format(self.name, nameExtra) if nameExtra else self.name
+        return self.folderNamePattern.format(
+            name=name,
+            side=self.side,
+            index=self.index,
+            shortType=shortType
         )
 
-        dags.append(ik_handle)
+    def asdict(self):  # type: () -> dict
+        data = super(RMayaComponent, self).asdict()
+        data['name'] = self.name
+        data['side'] = self.side
+        data['index'] = self.index
+        return data
 
-        # Create ik ctrls
-        ik_ctrls = list()
-        ik_joints = list()
-        for i, joint in enumerate((joints[0], joints[-1])):
-            ik_ctrl = componentUtils.Ctrl.create(
-                id_='{}_ik_{}'.format(id_, i),
-                side=side,
-                index=index,
-                size=size,
-                axis='y',
-                color=ik_color,
-            )
-            ctrls.append(ik_ctrl)
-            # Create curve's joint
-            cmds.select(clear=True)
-            ik_joint_name = componentUtils.Name.compose('{}_ik_{}'.format(id_, i), side, index, 'jnt')
-            ik_joint = cmds.joint(name=ik_joint_name)
-            ik_joints.append(ik_joint)
-            cmds.parent(ik_joint, ik_ctrl)
+    def _initializeCreation(self):
+        folderName = self.composeName(ShortType.component)
 
-            # Snap ctrl to main joint chain position
-            joint_matrix = componentUtils.Matrix(cmds.xform(joint, q=True, matrix=True, worldSpace=True))
-            cmds.xform(ik_ctrl.get_buffer(), translation=joint_matrix.get_translation())
+        if cmds.objExists(folderName):
+            raise RuntimeError('Component already exists -> {}'.format(folderName))
 
-            ik_ctrls.append(ik_ctrl)
+        self.folder = cmds.group(empty=True, name=folderName)
 
-        componentUtils.Utils.matrix_constraint(ik_ctrls[0], joints[0], maintain_offset=True)
+    def _doCreation(self):
+        pass
 
-        # Skin the curve
-        cmds.skinCluster(ik_joints, curve)
+    def _finalizeCreation(self):
+        if self.rootDags:
+            cmds.parent(self.rootDags, self.folder)
 
-        # Create fk ctrls
-        fk_ctrls = list()
-        for i, joint in enumerate(joints):
-            fk_ctrl = componentUtils.Ctrl.create(
-                id_='{}_{}'.format(id_, i),
-                side=side,
-                index=index,
-                color=fk_color,
-                size=size
-            )
-            ctrls.append(fk_ctrl)
-            joint_matrix = cmds.xform(joint, q=True, matrix=True, worldSpace=True)
-            cmds.xform(fk_ctrl.get_buffer(), matrix=joint_matrix)
-            fk_ctrls.append(fk_ctrl)
-            if i != 0:
-                cmds.parent(fk_ctrl.get_buffer(), fk_ctrls[i - 1])
-
-        # Like ik anf fk setup
-        cmds.parent(ik_ctrls[-1].get_buffer(), fk_ctrls[-1])
-        cmds.parent(fk_ctrls[0].get_buffer(), ik_ctrls[0])
-
-        dags.append(ik_ctrls[0].get_buffer())
-
-        roots.append(ik_ctrls[0])
-
-        return cls.create_folder(dags=dags, name=name, skin_joints=skin_joints, ctrls=ctrls, ends=ends, roots=roots)
+    def create(self):  # type: () -> None
+        self._initializeCreation()
+        self._doCreation()
+        self._finalizeCreation()
 
 
-class TwoSegmentsLimb(MyComponent):
+class ROneCtrl(RMayaComponent):
 
-    @classmethod
-    def create_chain(cls, id_, side, index, type_, matrices):
-        joints = list()
-        for i, matrix in enumerate(matrices):
-            cmds.select(clear=True)
-            joint_name = componentUtils.Name.compose('{}_{}'.format(id_, i), side, index, type_)
-            joint = cmds.joint(name=joint_name)
-            cmds.xform(joint, matrix=list(matrix))
-            joints.append(joint)
-            if i != 0:
-                cmds.parent(joint, joints[i - 1])
-        cmds.makeIdentity(joints[0], apply=True, translate=False, rotate=True, scale=False, normal=False, pn=True)
-        return joints
+    def __init__(self, matrix=Matrix(), **kwargs):
+        self.matrix = matrix
+        super(ROneCtrl, self).__init__(**kwargs)
 
-    @classmethod
-    def create(cls, id_=None, side=None, index=None, matrices=None, size=1, fk_color=None, ik_color=None):
-        name, id_, side, index = cls.compose_folder_name(id_=id_, side=side, index=index)
+    def _doCreation(self):
+        ctrl, = cmds.circle(constructionHistory=False, name=self.composeName(ShortType.ctrl))
+        ctrlBuffer = cmds.group(empty=True, name=self.composeName(ShortType.ctrlBuffer))
+        joint = cmds.joint(name=self.composeName(ShortType.joint))
+        cmds.parent(ctrl, ctrlBuffer)
+        cmds.parent(joint, ctrl)
 
-        dags = list()
-        roots = list()
-        ends = list()
-        skin_joints = list()
-        ctrls = list()
+        print self.matrix
+        cmds.xform(ctrlBuffer, matrix=self.matrix.aslist())
 
-        ###
-        if len(matrices) != 4:
-            cmds.error('Got () matrices. Need exactly 4.'.format(len(matrices)))
+        self.skinJoints.append(joint)
+        self.rootDags.append(ctrlBuffer)
 
-        # draw skin joints
-        joints = cls.create_chain(id_, side, index, 'skin', matrices)
-        ik_joints = cls.create_chain('{}_{}'.format(id_, 'ik'), side, index, 'jnt', matrices)
+    def asdict(self):  # type: () -> dict
+        data = super(ROneCtrl, self).asdict()
+        data['matrix'] = self.matrix
+        return data
 
-        joints_grp_name = componentUtils.Name.compose('{}_{}'.format(id_, 'joints'), side, index, 'grp')
-        joints_grp = cmds.group(empty=True, name=joints_grp_name)
-        cmds.xform(joints_grp, matrix=list(matrices[0]))
-        cmds.parent(joints[0], ik_joints[0], joints_grp)
 
-        dags.append(joints_grp)
-        skin_joints += joints
-        ends.append(joints[-1])
-        roots.append(joints_grp)
+def test():
 
-        # ik handle
-        ik_handle_name = componentUtils.Name.compose(id_, side, index, 'ikHandle')
-        ik_handle, _ = cmds.ikHandle(
-            name=ik_handle_name,
-            solver='ikRPsolver',
-            startJoint=ik_joints[0],
-            endEffector=ik_joints[-2],
-        )
+    cmds.file(new=True, force=True)
 
-        dags.append(ik_handle)
+    # Instantiate the components
+    component = ROneCtrl(side=Side('L'), matrix=Matrix(vectorP=Vector(10, 10, 10)))
+    mirroredComponent = rigBuilder.mirror(component)
 
-        # ik handle hand
-        ik_handle_hand_name = componentUtils.Name.compose(id_, side, index, 'ikHandle')
-        ik_handle_hand, _ = cmds.ikHandle(
-            name=ik_handle_hand_name,
-            solver='ikSCsolver',
-            startJoint=ik_joints[-2],
-            endEffector=ik_joints[-1],
-        )
+    #
+    print component
+    print mirroredComponent
 
-        dags.append(ik_handle)
-
-        # Ik arm ctrl
-        ik_arm_ctrl = componentUtils.Ctrl.create(id_='{}_{}'.format(id_, 'ik'), side=side, index=index, size=size, color=ik_color, shape=componentUtils.Shape.cube)
-        cmds.xform(ik_arm_ctrl.get_buffer(), matrix=list(matrices[-2]))
-        componentUtils.Utils.matrix_constraint(ik_arm_ctrl, ik_handle, maintain_offset=True)
-        componentUtils.Utils.matrix_constraint(ik_arm_ctrl, ik_handle_hand, maintain_offset=True)
-
-        dags.append(ik_arm_ctrl.get_buffer())
-        ctrls.append(ik_arm_ctrl)
-        roots.append(ik_arm_ctrl.get_buffer())
-
-        # Connect ik chain to skin_chain
-        for ik_joint, skin_joint in zip(ik_joints, skin_joints):
-            for attr in ('t', 'r', 's'):
-                cmds.connectAttr('{}.{}'.format(ik_joint, attr), '{}.{}'.format(skin_joint, attr))
-
-        ###
-        return cls.create_folder(dags=dags, name=name, skin_joints=skin_joints, ctrls=ctrls, ends=ends, roots=roots)
+    # Create the components
+    component.create()
+    mirroredComponent.create()
