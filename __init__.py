@@ -91,14 +91,17 @@ class RMayaComponent(rigBuilder.RBaseComponent):
 
 class ROneCtrl(RMayaComponent):
 
-    def __init__(self, matrix=RParam.Matrix(), **kwargs):  # type: (RParam.Matrix, ...) -> None
+    def __init__(self, matrix=RParam.Matrix(), normalVector=RParam.xVector, **kwargs):
+        # type: (RParam.Matrix, RParam.Vector3, ...) -> None
         self.matrix = matrix
+        self.normalVector = normalVector
         super(ROneCtrl, self).__init__(**kwargs)
 
     def _doCreation(self):
         ctrl = RObj.Controller.create(
             name=self.composeObjName(RParam.ShortType.ctrl),
-            color=self.color
+            color=self.color,
+            normalVector=self.normalVector,
         )
         ctrlBuffer = cmds.group(empty=True)
         joint = cmds.joint(name=self.composeObjName(RParam.ShortType.skinJoint))
@@ -116,27 +119,31 @@ class ROneCtrl(RMayaComponent):
     def asdict(self):  # type: () -> dict
         data = super(ROneCtrl, self).asdict()
         data['matrix'] = self.matrix
+        data['normalVector'] = self.normalVector
         return data
 
     def asmirroreddict(self, mirrorAxis=RParam.xAxis):  # type: (RParam.Axis) -> dict
         data = super(ROneCtrl, self).asmirroreddict()
-        data['matrix'] = self.matrix.mirror(mirrorAxis)
+        data['matrix'] = self.matrix.mirrored(mirrorAxis)
+        data['normalVector'] = self.normalVector.mirrored(mirrorAxis)
         return data
 
 
 def test():
-    from . import RParam, RObj
-    reload(RParam)
-    reload(RObj)
 
     cmds.file(new=True, force=True)
 
     # Instantiate the components
     component = ROneCtrl(
         side=RParam.leftSide,
-        matrix=RParam.Matrix(position=RParam.Vector3(10, 10, 10)),
+        matrix=RParam.Matrix(
+            vectorX=RParam.Vector3(0, 0, -1),
+            vectorY=RParam.Vector3(0, 1, 0),
+            vectorZ=RParam.Vector3(1, 0, 0),
+            position=RParam.Vector3(10, 10, 10)
+        ),
     )
-    mirroredComponent = component.mirror(RParam.xAxis)
+    mirroredComponent = component.mirrored(RParam.xAxis)
 
     #
     print component
@@ -147,3 +154,10 @@ def test():
     mirroredComponent.create()
 
     cmds.select(clear=True)
+
+    # small test
+    print '-' * 10
+    nullVector = RParam.Vector3(2, 2, -2)
+    nullVector = nullVector.normalized()
+    print nullVector
+    print nullVector.magnitude()

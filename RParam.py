@@ -83,8 +83,37 @@ class Vector3(object):
     def aslist(self):
         return [self.x, self.y, self.z]
 
+    def copy(self):
+        return self.__class__(self.x, self.y, self.z)
+
     def magnitude(self):
         return math.sqrt(self.x ** 2.0 + self.y ** 2.0 + self.z ** 2.0)
+
+    def mirrored(self, mirrorAxis=xAxis):
+        vectorCopy = self.copy()
+        vectorCopy.mirror(mirrorAxis)
+        return vectorCopy
+
+    def mirror(self, mirrorAxis):
+        if mirrorAxis == xAxis:
+            self.x *= -1
+        elif mirrorAxis == yAxis:
+            self.y *= -1
+        elif mirrorAxis == zAxis:
+            self.z *= -1
+        else:
+            raise ValueError('Unrecognized axis -> {}'.format(mirrorAxis))
+
+    def normalized(self):
+        vectorCopy = self.copy()
+        vectorCopy.normalize()
+        return vectorCopy
+
+    def normalize(self):
+        magnitude = self.magnitude()
+        self.x /= magnitude
+        self.y /= magnitude
+        self.z /= magnitude
 
 
 class Matrix(object):
@@ -122,22 +151,34 @@ class Matrix(object):
         ls.append(1.0)
         return ls
 
-    def mirror(self, mirrorAxis=xAxis):  # type: (Axis) -> Matrix
-        vectorP = Vector3(*self.position.aslist())
-        if mirrorAxis == xAxis:
-            vectorP.x *= -1
-        elif mirrorAxis == yAxis:
-            vectorP.y *= -1
-        elif mirrorAxis == zAxis:
-            vectorP.z *= -1
-
-        print vectorP
+    def copy(self):
         return self.__class__(
-            self.vectorX,
-            self.vectorY,
-            self.vectorZ,
-            vectorP,
+            self.vectorX.copy(),
+            self.vectorY.copy(),
+            self.vectorZ.copy(),
+            self.position.copy()
         )
+
+    def mirrored(self, mirrorAxis=xAxis):  # type: (Axis) -> Matrix
+        matrixCopy = self.copy()
+        matrixCopy.mirror(mirrorAxis)
+        return matrixCopy
+
+    def mirror(self, mirrorAxis=xAxis):
+        self.vectorX = self.vectorX.mirrored(mirrorAxis)
+        self.vectorY = self.vectorY.mirrored(mirrorAxis)
+        self.vectorZ = self.vectorZ.mirrored(mirrorAxis)
+        self.position = self.position.mirrored(mirrorAxis)
+
+    def normalized(self):
+        matrixCopy = self.copy()
+        matrixCopy.normalize()
+        return matrixCopy
+
+    def normalize(self):
+        self.vectorX = self.vectorX.normalized()
+        self.vectorY = self.vectorY.normalized()
+        self.vectorZ = self.vectorZ.normalized()
 
 
 class Color(object):
@@ -148,11 +189,7 @@ class Color(object):
         self.b = int(b)
 
     def aslist(self):
-        return [
-            self.r,
-            self.g,
-            self.b,
-        ]
+        return [self.r, self.g, self.b]
 
 
 defaultColor = Color(0, 0, 255)

@@ -14,8 +14,19 @@ class Controller(object):
         return '<{}.{}: {}>'.format(self.__class__.__module__, self.__class__.__name__, self.name)
 
     @classmethod
-    def create(cls, name='ctrl#', color=RParam.defaultColor, radius=1.0):
-        name, = cmds.circle(name=name, constructionHistory=False, radius=radius)
+    def create(
+            cls,
+            name='ctrl#',
+            color=RParam.defaultColor,
+            radius=1.0,
+            normalVector=RParam.xVector,
+    ):
+        name, = cmds.circle(
+            name=name,
+            constructionHistory=False,
+            radius=radius,
+            normal=normalVector.aslist()
+        )
 
         cmds.controller(name)
 
