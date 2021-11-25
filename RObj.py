@@ -17,9 +17,9 @@ class Controller(object):
     def create(
             cls,
             name='ctrl#',
-            color=RParam.defaultColor,
+            color=RParam.Color(0, 0, 255),
             radius=1.0,
-            normalVector=RParam.xVector,
+            normalVector=RParam.Vector3(1.0, 0.0, 0.0),
     ):
         name, = cmds.circle(
             name=name,

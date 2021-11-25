@@ -1,76 +1,7 @@
 import math
 
 
-class ShortType(object):
-
-    skinJoint = 'skn'
-    ctrl = 'ctl'
-    component = 'cmp'
-
-
-class Side(object):
-
-    def __init__(self, name):
-        self.name = str(name)
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return '<{}.{}: {}>'.format(self.__class__.__module__, self.__class__.__name__, self.name)
-
-
-leftSide = Side('L')
-rightSide = Side('R')
-centerSide = Side('C')
-
-sideMirrorTable = {
-    leftSide: rightSide,
-    rightSide: leftSide,
-    centerSide: None
-}
-
-
-class Axis(object):
-
-    def __init__(self, name):
-        self.name = str(name)
-
-    def __eq__(self, other):
-        if isinstance(self, Axis):
-            return self.name == other.name
-        return False
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return '<{}.{}: {}>'.format(self.__class__.__module__, self.__class__.__name__, self.name)
-
-
-xAxis = Axis('x')
-yAxis = Axis('y')
-zAxis = Axis('z')
-
-
-class Index(object):
-
-    def __init__(self, value):  # type: (int) -> None
-        value = int(value)
-
-        if value < 0:
-            raise ValueError('Index should be positive -> {}'.format(value))
-
-        self.value = value
-
-    def __str__(self):
-        return str(self.value)
-
-    def __repr__(self):
-        return '<{}.{}: {}>'.format(self.__class__.__module__, self.__class__.__name__, self.value)
-
-
-class Vector3(object):
+class Position3(object):
 
     def __init__(self, x=0.0, y=0.0, z=0.0):  # type: (float, float, float) -> None
         self.x = float(x)
@@ -86,23 +17,33 @@ class Vector3(object):
     def copy(self):
         return self.__class__(self.x, self.y, self.z)
 
-    def magnitude(self):
-        return math.sqrt(self.x ** 2.0 + self.y ** 2.0 + self.z ** 2.0)
-
-    def mirrored(self, mirrorAxis=xAxis):
+    def mirrored(self, mirrorAxis='x'):
         vectorCopy = self.copy()
         vectorCopy.mirror(mirrorAxis)
         return vectorCopy
 
-    def mirror(self, mirrorAxis):
-        if mirrorAxis == xAxis:
+    def mirror(self, mirrorAxis='x'):
+        if mirrorAxis == 'x':
             self.x *= -1
-        elif mirrorAxis == yAxis:
+        elif mirrorAxis == 'y':
             self.y *= -1
-        elif mirrorAxis == zAxis:
+        elif mirrorAxis == 'z':
             self.z *= -1
         else:
             raise ValueError('Unrecognized axis -> {}'.format(mirrorAxis))
+
+
+class Vector3(Position3):
+
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        super(Vector3, self).__init__(x, y, z)
+
+        magnitude = self.magnitude()
+        if magnitude <= 0.0:
+            raise ValueError('magnitude is equal or less than 0.0 -> {}'.format(magnitude))
+
+    def magnitude(self):
+        return math.sqrt(self.x ** 2.0 + self.y ** 2.0 + self.z ** 2.0)
 
     def normalized(self):
         vectorCopy = self.copy()
@@ -123,8 +64,8 @@ class Matrix(object):
             vectorX=Vector3(1.0, 0.0, 0.0),
             vectorY=Vector3(0.0, 1.0, 0.0),
             vectorZ=Vector3(0.0, 0.0, 1.0),
-            position=Vector3(0.0, 0.0, 0.0),
-    ):  # type: (Vector3, Vector3, Vector3, Vector3) -> None
+            position=Position3(0.0, 0.0, 0.0),
+    ):  # type: (Vector3, Vector3, Vector3, Position3) -> None
         self.vectorX = vectorX
         self.vectorY = vectorY
         self.vectorZ = vectorZ
@@ -159,12 +100,12 @@ class Matrix(object):
             self.position.copy()
         )
 
-    def mirrored(self, mirrorAxis=xAxis):  # type: (Axis) -> Matrix
+    def mirrored(self, mirrorAxis='x'):  # type: (Axis) -> Matrix
         matrixCopy = self.copy()
         matrixCopy.mirror(mirrorAxis)
         return matrixCopy
 
-    def mirror(self, mirrorAxis=xAxis):
+    def mirror(self, mirrorAxis='x'):
         self.vectorX = self.vectorX.mirrored(mirrorAxis)
         self.vectorY = self.vectorY.mirrored(mirrorAxis)
         self.vectorZ = self.vectorZ.mirrored(mirrorAxis)
@@ -184,22 +125,9 @@ class Matrix(object):
 class Color(object):
 
     def __init__(self, r, g, b):
-        self.r = int(r)
-        self.g = int(g)
-        self.b = int(b)
+        self.r = max(0, min(255, int(r)))
+        self.g = max(0, min(255, int(g)))
+        self.b = max(0, min(255, int(b)))
 
     def aslist(self):
         return [self.r, self.g, self.b]
-
-
-defaultColor = Color(0, 0, 255)
-
-centerColor = Color(255, 255, 0)
-leftColor = Color(0, 255, 0)
-rightColor = Color(255, 0, 0)
-
-sideColorTable = {
-    leftSide: leftColor,
-    rightSide: rightColor,
-    centerSide: centerColor,
-}

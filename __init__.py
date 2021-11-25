@@ -4,40 +4,78 @@ from . import RParam, RObj
 
 
 class RMayaComponent(rigBuilder.RBaseComponent):
-    folderNamePattern = '{name}_{side}_{index}_{shortType}'
+    # name pattern
+    objNamePattern = '{name}_{side}_{index}_{objType}'
+
+    # default component name
+    defaultComponentName = 'component'
+
+    # types
+    controllerTypeStr = 'ctl'
+    skinJointTypeStr = 'skn'
+    componentTypeStr = 'cmp'
+
+    leftSide = 'L'
+    rightSide = 'R'
+    centerSide = 'C'
+
+    # colors
+    centerColor = RParam.Color(255, 255, 0)
+    leftColor = RParam.Color(0, 255, 0)
+    rightColor = RParam.Color(255, 0, 0)
+
+    @property
+    def sideMirrorTable(self):
+        return {
+            self.leftSide: self.rightSide,
+            self.rightSide: self.leftSide,
+            self.centerSide: None
+        }
+
+    @property
+    def sideColorTable(self):
+        return {
+            self.leftSide: self.leftColor,
+            self.rightSide: self.rightColor,
+            self.centerSide: self.centerColor
+        }
 
     def __init__(
             self,
-            name='untitled',
-            side=RParam.centerSide,
-            index=RParam.Index(0),
+            name=None,
+            side=centerSide,
+            index=0,
             color=None,
             size=1.0,
     ):
-        # type: (str, RParam.Side, RParam.Index, RParam.Color or None, float) -> None
         super(RMayaComponent, self).__init__()
 
+        # check index
+        index = int(index)
+        if index < 0:
+            raise ValueError('index should be positive -> {}'.format(index))
+
         # naming parameters
-        self.name = name
-        self.side = side
+        self.name = str(name) if name is not None else self.defaultComponentName
+        self.side = str(side)
         self.index = index
 
         # display parameters
-        self.color = color if color is not None else RParam.sideColorTable[side]
-        self.size = size
+        self.color = color if color is not None else self.sideColorTable[side]
+        self.size = abs(float(size))
 
         # internal objects
         self.folder = None
         self.rootDags = list()
         self.skinJoints = list()
 
-    def composeObjName(self, shortType, nameExtra=None):
+    def composeObjName(self, objType, nameExtra=None):
         name = '{}_{}'.format(self.name, nameExtra) if nameExtra else self.name
-        return self.folderNamePattern.format(
+        return self.objNamePattern.format(
             name=name,
             side=self.side,
             index=self.index,
-            shortType=shortType
+            objType=objType
         )
 
     def asdict(self):  # type: () -> dict
@@ -49,11 +87,11 @@ class RMayaComponent(rigBuilder.RBaseComponent):
 
     def asmirroreddict(self):  # type: () -> dict
         data = super(RMayaComponent, self).asmirroreddict()
-        data['side'] = RParam.sideMirrorTable.get(data['side'], None)
+        data['side'] = self.sideMirrorTable.get(data['side'], None)
         return data
 
     def _initializeCreation(self):
-        folderName = self.composeObjName(RParam.ShortType.component)
+        folderName = self.composeObjName(self.componentTypeStr)
 
         if cmds.objExists(folderName):
             raise RuntimeError('Component already exists -> {}'.format(folderName))
@@ -89,22 +127,24 @@ class RMayaComponent(rigBuilder.RBaseComponent):
         self._finalizeCreation()
 
 
-class ROneCtrl(RMayaComponent):
+class RCtrlComponent(RMayaComponent):
 
-    def __init__(self, matrix=RParam.Matrix(), normalVector=RParam.xVector, **kwargs):
+    defaultComponentName = 'ctrl'
+
+    def __init__(self, matrix=RParam.Matrix(), normalVector=RParam.Vector3(1.0, 0.0, 0.0), **kwargs):
         # type: (RParam.Matrix, RParam.Vector3, ...) -> None
         self.matrix = matrix
         self.normalVector = normalVector
-        super(ROneCtrl, self).__init__(**kwargs)
+        super(RCtrlComponent, self).__init__(**kwargs)
 
     def _doCreation(self):
         ctrl = RObj.Controller.create(
-            name=self.composeObjName(RParam.ShortType.ctrl),
+            name=self.composeObjName(self.controllerTypeStr),
             color=self.color,
             normalVector=self.normalVector,
         )
         ctrlBuffer = cmds.group(empty=True)
-        joint = cmds.joint(name=self.composeObjName(RParam.ShortType.skinJoint))
+        joint = cmds.joint(name=self.composeObjName(self.skinJointTypeStr))
         cmds.parent(ctrl, ctrlBuffer)
         cmds.parent(joint, ctrl)
 
@@ -112,21 +152,66 @@ class ROneCtrl(RMayaComponent):
 
         self.controllers.append(ctrl)
         self.skinJoints.append(joint)
-        self.outputs.append(joint)
+        self.outputs.append(ctrl)
         self.inputs.append(ctrlBuffer)
         self.rootDags.append(ctrlBuffer)
 
     def asdict(self):  # type: () -> dict
-        data = super(ROneCtrl, self).asdict()
+        data = super(RCtrlComponent, self).asdict()
         data['matrix'] = self.matrix
         data['normalVector'] = self.normalVector
         return data
 
-    def asmirroreddict(self, mirrorAxis=RParam.xAxis):  # type: (RParam.Axis) -> dict
-        data = super(ROneCtrl, self).asmirroreddict()
+    def asmirroreddict(self, mirrorAxis='x'):  # type: (basestring) -> dict
+        data = super(RCtrlComponent, self).asmirroreddict()
         data['matrix'] = self.matrix.mirrored(mirrorAxis)
         data['normalVector'] = self.normalVector.mirrored(mirrorAxis)
         return data
+
+
+class RBaseComponent(RCtrlComponent):
+
+    defaultComponentName = 'base'
+
+    def __init__(self, normalVector=RParam.Vector3(0.0, 1.0, 0.0), **kwargs):
+        super(RBaseComponent, self).__init__(normalVector=normalVector, **kwargs)
+
+    def _doCreation(self):
+        worldBuffer = cmds.group(empty=True)
+        worldCtrl = RObj.Controller.create(
+            name=self.composeObjName(nameExtra='world', objType=self.controllerTypeStr),
+            color=self.color,
+            normalVector=self.normalVector,
+        )
+
+        worldJoint = cmds.joint(name=self.composeObjName(nameExtra='world', objType=self.skinJointTypeStr))
+
+        localBuffer = cmds.group(empty=True)
+        localCtrl = RObj.Controller.create(
+            name=self.composeObjName(nameExtra='local', objType=self.controllerTypeStr),
+            color=self.color,
+            normalVector=self.normalVector,
+        )
+
+        localJoint = cmds.joint(name=self.composeObjName(nameExtra='local', objType=self.skinJointTypeStr))
+
+        cmds.parent(worldCtrl, worldBuffer)
+        cmds.parent(localCtrl, localBuffer)
+
+        cmds.parent(localBuffer, worldCtrl)
+
+        self.inputs.append(worldBuffer)
+
+        self.rootDags.append(worldBuffer)
+
+        self.controllers.append(worldCtrl)
+        self.controllers.append(localCtrl)
+
+        self.outputs.append(worldCtrl)
+        self.outputs.append(localCtrl)
+
+        self.skinJoints.append(worldJoint)
+        self.skinJoints.append(localJoint)
 
 
 def test():
@@ -134,30 +219,27 @@ def test():
     cmds.file(new=True, force=True)
 
     # Instantiate the components
-    component = ROneCtrl(
-        side=RParam.leftSide,
+    component = RCtrlComponent(
+        side=RCtrlComponent.leftSide,
         matrix=RParam.Matrix(
             vectorX=RParam.Vector3(0, 0, -1),
             vectorY=RParam.Vector3(0, 1, 0),
             vectorZ=RParam.Vector3(1, 0, 0),
-            position=RParam.Vector3(10, 10, 10)
+            position=RParam.Position3(10, 10, 10)
         ),
     )
-    mirroredComponent = component.mirrored(RParam.xAxis)
+    baseComponent = RBaseComponent()
+
+    mirroredComponent = component.mirrored('x')
 
     #
     print component
     print mirroredComponent
+    print baseComponent
 
     # Create the components
     component.create()
     mirroredComponent.create()
+    baseComponent.create()
 
     cmds.select(clear=True)
-
-    # small test
-    print '-' * 10
-    nullVector = RParam.Vector3(2, 2, -2)
-    nullVector = nullVector.normalized()
-    print nullVector
-    print nullVector.magnitude()
