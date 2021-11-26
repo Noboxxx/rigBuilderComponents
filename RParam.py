@@ -64,54 +64,79 @@ class Matrix(object):
 
     def __init__(
             self,
-            vectorX=Vector3(1.0, 0.0, 0.0),
-            vectorY=Vector3(0.0, 1.0, 0.0),
-            vectorZ=Vector3(0.0, 0.0, 1.0),
-            position=Position3(0.0, 0.0, 0.0),
-    ):  # type: (Vector3, Vector3, Vector3, Position3) -> None
-        self.vectorX = vectorX
-        self.vectorY = vectorY
-        self.vectorZ = vectorZ
-        self.position = position
+            xx=1.0, xy=0.0, xz=0.0, xw=0.0,
+            yx=0.0, yy=1.0, yz=0.0, yw=0.0,
+            zx=0.0, zy=0.0, zz=1.0, zw=0.0,
+            px=0.0, py=0.0, pz=0.0, pw=1.0,
+    ):
+        self.xx = float(xx)
+        self.xy = float(xy)
+        self.xz = float(xz)
+        self.xw = float(xw)
+
+        self.yx = float(yx)
+        self.yy = float(yy)
+        self.yz = float(yz)
+        self.yw = float(yw)
+
+        self.zx = float(zx)
+        self.zy = float(zy)
+        self.zz = float(zz)
+        self.zw = float(zw)
+
+        self.px = float(px)
+        self.py = float(py)
+        self.pz = float(pz)
+        self.pw = float(pw)
 
     def __repr__(self):
-        return '<{}.{}: {}, {}, {}, {}>'.format(
+        return '<{}.{}: {}>'.format(
             self.__class__.__module__,
             self.__class__.__name__,
-            self.vectorX,
-            self.vectorY,
-            self.vectorZ,
-            self.position
+            self.aslist(),
         )
 
     def __iter__(self):
-        return iter(
-            (
-                self.vectorX,
-                self.vectorY,
-                self.vectorZ,
-                self.position,
-            )
-        )
+        return iter(self.aslist())
 
     def aslist(self):
-        ls = self.vectorX.aslist()
-        ls.append(0.0)
-        ls += self.vectorY.aslist()
-        ls.append(0.0)
-        ls += self.vectorZ.aslist()
-        ls.append(0.0)
-        ls += self.position.aslist()
-        ls.append(1.0)
-        return ls
+        return (
+            self.xx,
+            self.xy,
+            self.xz,
+            self.xw,
+            self.yx,
+            self.yy,
+            self.yz,
+            self.yw,
+            self.zx,
+            self.zy,
+            self.zz,
+            self.zw,
+            self.px,
+            self.py,
+            self.pz,
+            self.pw,
+        )
+
+    def rows(self):
+        return (
+            (self.xx, self.xy, self.xz, self.xw),
+            (self.yx, self.yy, self.yz, self.yw),
+            (self.zx, self.zy, self.zz, self.zw),
+            (self.px, self.py, self.pz, self.pw),
+        )
+
+    def columns(self):
+        return (
+            (self.xx, self.yx, self.zx, self.px),
+            (self.xy, self.yy, self.zy, self.py),
+            (self.xz, self.yz, self.zz, self.pz),
+            (self.xw, self.yw, self.zw, self.pw),
+        )
 
     def copy(self):
-        return self.__class__(
-            self.vectorX.copy(),
-            self.vectorY.copy(),
-            self.vectorZ.copy(),
-            self.position.copy()
-        )
+        return self.__class__(*self.aslist())
 
     def mirrored(self, mirrorAxis='x'):  # type: (basestring) -> Matrix
         matrixCopy = self.copy()
@@ -119,20 +144,54 @@ class Matrix(object):
         return matrixCopy
 
     def mirror(self, mirrorAxis='x'):  # type: (basestring) -> None
-        self.vectorX = self.vectorX.mirrored(mirrorAxis)
-        self.vectorY = self.vectorY.mirrored(mirrorAxis)
-        self.vectorZ = self.vectorZ.mirrored(mirrorAxis)
-        self.position = self.position.mirrored(mirrorAxis)
+        if mirrorAxis == 'x':
+            self.xx *= -1
+            self.yx *= -1
+            self.zx *= -1
+            self.px *= -1
+
+        elif mirrorAxis == 'y':
+            self.xy *= -1
+            self.yy *= -1
+            self.zy *= -1
+            self.py *= -1
+
+        elif mirrorAxis == 'z':
+            self.xz *= -1
+            self.yz *= -1
+            self.zz *= -1
+            self.pz *= -1
+
+        else:
+            raise ValueError('Unrecognized mirror axis -> {}'.format(mirrorAxis))
 
     def normalized(self):
-        matrixCopy = self.copy()
-        matrixCopy.normalize()
-        return matrixCopy
+        raise NotImplementedError
 
     def normalize(self):
-        self.vectorX = self.vectorX.normalized()
-        self.vectorY = self.vectorY.normalized()
-        self.vectorZ = self.vectorZ.normalized()
+        raise NotImplementedError
+
+    def __mul__(self, other):
+        if isinstance(other, self.__class__):
+            newMatrix = list()
+            for column in self.rows()[:3]:
+                for row in other.columns()[:3]:
+                    result = 0
+                    for c, r in zip(column, row):
+                        result += c * r
+                    newMatrix.append(result)
+                newMatrix.append(0.0)
+            newMatrix.append(self.px + other.px)
+            newMatrix.append(self.py + other.py)
+            newMatrix.append(self.pz + other.pz)
+            newMatrix.append(1.0)
+            return self.__class__(*newMatrix)
+        raise TypeError(
+            'cannot do \'{}\' * \'{}\''.format(
+                str(self.__class__),
+                str(type(other)),
+            )
+        )
 
 
 class Color(object):

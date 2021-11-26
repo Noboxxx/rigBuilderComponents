@@ -2,6 +2,34 @@ from . import RParam
 from maya import cmds
 
 
+def createMatrixConstraint(parents, child, interface=None):
+    if interface is None:
+        interface = child
+
+    # for parent in parents:
+    multMatrix = cmds.createNode('multMatrix')
+    decomposeMatrix = cmds.createNode('decomposeMatrix')
+    cmds.connectAttr('{}.worldMatrix[0]'.format(parents[0]), '{}.matrixIn[1]'.format(multMatrix))
+    cmds.connectAttr('{}.matrixSum'.format(multMatrix), '{}.inputMatrix'.format(decomposeMatrix))
+
+    parentInverseWorldMatrix = RParam.Matrix(*cmds.getAttr('{}.worldInverseMatrix[0]'.format(parents[0])))
+    childWorldMatrix = RParam.Matrix(*cmds.getAttr('{}.worldMatrix[0]'.format(child)))
+
+    childLMatrix = parentInverseWorldMatrix * childWorldMatrix
+
+    cmds.setAttr(
+        '{}.matrixIn[0]'.format(multMatrix),
+        childLMatrix.aslist(),
+        type='matrix'
+    )
+
+    for attr in ('translate', 'rotate', 'scale', 'shear'):
+        cmds.connectAttr(
+            '{}.output{}'.format(decomposeMatrix, attr.title()),
+            '{}.{}'.format(child, attr)
+        )
+
+
 def createBuffer(obj, bufferSuffix='Buffer'):
     buffer_ = cmds.group(empty=True, name='{}{}'.format(obj, bufferSuffix))
     objMatrix = cmds.xform(obj, q=True, matrix=True, worldSpace=True)
