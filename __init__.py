@@ -7,22 +7,29 @@ class RMayaComponent(rigBuilder.RBaseComponent):
     # name pattern
     objNamePattern = '{name}_{side}_{index}_{objType}'
 
-    # default component name
-    defaultComponentName = 'component'
-
     # types
     controllerTypeStr = 'ctl'
     skinJointTypeStr = 'skn'
     componentTypeStr = 'cmp'
 
+    # sides
     leftSide = 'L'
     rightSide = 'R'
     centerSide = 'C'
 
     # colors
-    centerColor = RParam.Color(255, 255, 0)
-    leftColor = RParam.Color(0, 255, 0)
-    rightColor = RParam.Color(255, 0, 0)
+    specialColor = RParam.Color(166, 220, 237)
+
+    # defaults
+    defaultName = 'untitled'
+    defaultSide = centerSide
+    defaultIndex = 0
+    defaultCtrlSize = 1.0
+    defaultCtrlNormal = RParam.Vector3(1.0, 0.0, 0.0)
+
+    @property
+    def defaultColor(self):
+        return self.sideColorTable[self.side]
 
     @property
     def sideMirrorTable(self):
@@ -35,34 +42,24 @@ class RMayaComponent(rigBuilder.RBaseComponent):
     @property
     def sideColorTable(self):
         return {
-            self.leftSide: self.leftColor,
-            self.rightSide: self.rightColor,
-            self.centerSide: self.centerColor
+            self.leftSide: RParam.Color(0, 255, 0),
+            self.rightSide: RParam.Color(255, 0, 0),
+            self.centerSide: RParam.Color(255, 255, 0),
         }
 
-    def __init__(
-            self,
-            name=None,
-            side=centerSide,
-            index=0,
-            color=None,
-            size=1.0,
-    ):
+    def __init__(self, name=None, side=None, index=None, ctrlColor=None, ctrlSize=None, ctrlNormal=None):
+        # type: (str, str, int, RParam.Color, float, RParam.Vector3) -> None
         super(RMayaComponent, self).__init__()
 
-        # check index
-        index = int(index)
-        if index < 0:
-            raise ValueError('index should be positive -> {}'.format(index))
-
         # naming parameters
-        self.name = str(name) if name is not None else self.defaultComponentName
-        self.side = str(side)
-        self.index = index
+        self.name = str(name) if name is not None else self.defaultName
+        self.side = str(side) if side is not None else self.defaultSide
+        self.index = max(0, int(index)) if index is not None else self.defaultIndex
 
         # display parameters
-        self.color = color if color is not None else self.sideColorTable[side]
-        self.size = abs(float(size))
+        self.ctrlColor = RParam.Color(*ctrlColor) if ctrlColor is not None else self.defaultColor
+        self.ctrlSize = max(0.0, float(ctrlSize)) if ctrlSize is not None else self.defaultCtrlSize
+        self.ctrlNormal = RParam.Vector3(*ctrlNormal) if ctrlNormal is not None else self.defaultCtrlNormal
 
         # internal objects
         self.folder = None
@@ -129,24 +126,22 @@ class RMayaComponent(rigBuilder.RBaseComponent):
 
 class RCtrlComponent(RMayaComponent):
 
-    defaultComponentName = 'ctrl'
+    defaultName = 'ctrl'
 
-    def __init__(self, matrix=RParam.Matrix(), normalVector=RParam.Vector3(1.0, 0.0, 0.0), **kwargs):
-        # type: (RParam.Matrix, RParam.Vector3, ...) -> None
+    def __init__(self, matrix=RParam.Matrix(), **kwargs):
+        # type: (RParam.Matrix, ...) -> None
         self.matrix = matrix
-        self.normalVector = normalVector
         super(RCtrlComponent, self).__init__(**kwargs)
 
     def _doCreation(self):
         ctrl = RObj.Controller.create(
             name=self.composeObjName(self.controllerTypeStr),
-            color=self.color,
-            normalVector=self.normalVector,
+            color=self.ctrlColor,
+            normal=self.ctrlNormal,
+            size=self.ctrlSize
         )
-        ctrlBuffer = cmds.group(empty=True)
         joint = cmds.joint(name=self.composeObjName(self.skinJointTypeStr))
-        cmds.parent(ctrl, ctrlBuffer)
-        cmds.parent(joint, ctrl)
+        ctrlBuffer = RObj.createBuffer(ctrl)
 
         cmds.xform(ctrlBuffer, matrix=self.matrix.aslist())
 
@@ -159,44 +154,42 @@ class RCtrlComponent(RMayaComponent):
     def asdict(self):  # type: () -> dict
         data = super(RCtrlComponent, self).asdict()
         data['matrix'] = self.matrix
-        data['normalVector'] = self.normalVector
+        data['ctrlNormal'] = self.ctrlNormal
         return data
 
     def asmirroreddict(self, mirrorAxis='x'):  # type: (basestring) -> dict
         data = super(RCtrlComponent, self).asmirroreddict()
         data['matrix'] = self.matrix.mirrored(mirrorAxis)
-        data['normalVector'] = self.normalVector.mirrored(mirrorAxis)
+        data['ctrlNormal'] = self.ctrlNormal.mirrored(mirrorAxis)
         return data
 
 
-class RBaseComponent(RCtrlComponent):
+class RBaseComponent(RMayaComponent):
 
-    defaultComponentName = 'base'
+    worldName = 'world'
+    localName = 'local'
 
-    def __init__(self, normalVector=RParam.Vector3(0.0, 1.0, 0.0), **kwargs):
-        super(RBaseComponent, self).__init__(normalVector=normalVector, **kwargs)
+    defaultName = 'base'
+    defaultCtrlNormal = RParam.Vector3(0.0, 1.0, 0.0)
 
     def _doCreation(self):
-        worldBuffer = cmds.group(empty=True)
         worldCtrl = RObj.Controller.create(
-            name=self.composeObjName(nameExtra='world', objType=self.controllerTypeStr),
-            color=self.color,
-            normalVector=self.normalVector,
+            name=self.composeObjName(nameExtra=self.worldName, objType=self.controllerTypeStr),
+            color=self.ctrlColor,
+            normal=self.ctrlNormal,
+            size=self.ctrlSize,
         )
+        worldJoint = cmds.joint(name=self.composeObjName(nameExtra=self.worldName, objType=self.skinJointTypeStr))
+        worldBuffer = RObj.createBuffer(worldCtrl)
 
-        worldJoint = cmds.joint(name=self.composeObjName(nameExtra='world', objType=self.skinJointTypeStr))
-
-        localBuffer = cmds.group(empty=True)
         localCtrl = RObj.Controller.create(
             name=self.composeObjName(nameExtra='local', objType=self.controllerTypeStr),
-            color=self.color,
-            normalVector=self.normalVector,
+            color=self.ctrlColor + 100,
+            normal=self.ctrlNormal,
+            size=self.ctrlSize * .9,
         )
-
         localJoint = cmds.joint(name=self.composeObjName(nameExtra='local', objType=self.skinJointTypeStr))
-
-        cmds.parent(worldCtrl, worldBuffer)
-        cmds.parent(localCtrl, localBuffer)
+        localBuffer = RObj.createBuffer(localCtrl)
 
         cmds.parent(localBuffer, worldCtrl)
 
@@ -214,12 +207,48 @@ class RBaseComponent(RCtrlComponent):
         self.skinJoints.append(localJoint)
 
 
-def test():
+class RMayaRig(rigBuilder.RBaseRig):
+    defaultName = 'rig'
 
+    def __init__(self, name=None):
+        super(RMayaRig, self).__init__()
+        self.name = str(name) if name is not None else self.defaultName
+        self.folder = None
+
+    def mirrored(self, *args, **kwargs):
+        mirroredComponents = list()
+        for component in self.components:
+            if component.side == RMayaComponent.centerSide:
+                continue
+            mirroredComponents.append(component.mirrored(*args, **kwargs))
+        return mirroredComponents
+
+    def mirror(self, *args, **kwargs):
+        self.components += self.mirrored(*args, **kwargs)
+
+    def _initializeCreation(self):
+        self.folder = cmds.group(empty=True, name=self.name)
+
+    def _doCreation(self):
+        super(RMayaRig, self).create()
+
+    def _finalizeCreation(self):
+        for component in self.components:
+            cmds.parent(component.folder, self.folder)
+
+    def create(self):
+        self._initializeCreation()
+        self._doCreation()
+        self._finalizeCreation()
+
+
+def test():
     cmds.file(new=True, force=True)
 
     # Instantiate the components
-    component = RCtrlComponent(
+    baseComponent = RBaseComponent(ctrlSize=10)
+
+    ctrlComp = RCtrlComponent(
         side=RCtrlComponent.leftSide,
         matrix=RParam.Matrix(
             vectorX=RParam.Vector3(0, 0, -1),
@@ -228,18 +257,12 @@ def test():
             position=RParam.Position3(10, 10, 10)
         ),
     )
-    baseComponent = RBaseComponent()
-
-    mirroredComponent = component.mirrored('x')
-
-    #
-    print component
-    print mirroredComponent
-    print baseComponent
 
     # Create the components
-    component.create()
-    mirroredComponent.create()
-    baseComponent.create()
+    rig = RMayaRig()
+    rig.components += [ctrlComp, baseComponent]
+    rig.mirror(mirrorAxis='x')
+    rig.create()
 
+    # clear sel
     cmds.select(clear=True)

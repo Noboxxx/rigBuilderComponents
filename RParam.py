@@ -11,6 +11,9 @@ class Position3(object):
     def __repr__(self):
         return '<{}.{}: {}, {}, {}>'.format(self.__class__.__module__, self.__class__.__name__, self.x, self.y, self.z)
 
+    def __iter__(self):
+        return iter(self.aslist())
+
     def aslist(self):
         return [self.x, self.y, self.z]
 
@@ -81,6 +84,16 @@ class Matrix(object):
             self.position
         )
 
+    def __iter__(self):
+        return iter(
+            (
+                self.vectorX,
+                self.vectorY,
+                self.vectorZ,
+                self.position,
+            )
+        )
+
     def aslist(self):
         ls = self.vectorX.aslist()
         ls.append(0.0)
@@ -100,12 +113,12 @@ class Matrix(object):
             self.position.copy()
         )
 
-    def mirrored(self, mirrorAxis='x'):  # type: (Axis) -> Matrix
+    def mirrored(self, mirrorAxis='x'):  # type: (basestring) -> Matrix
         matrixCopy = self.copy()
         matrixCopy.mirror(mirrorAxis)
         return matrixCopy
 
-    def mirror(self, mirrorAxis='x'):
+    def mirror(self, mirrorAxis='x'):  # type: (basestring) -> None
         self.vectorX = self.vectorX.mirrored(mirrorAxis)
         self.vectorY = self.vectorY.mirrored(mirrorAxis)
         self.vectorZ = self.vectorZ.mirrored(mirrorAxis)
@@ -124,10 +137,48 @@ class Matrix(object):
 
 class Color(object):
 
+    @classmethod
+    def clamp(cls, mini, value, maxi):
+        return max(mini, min(maxi, value))
+
     def __init__(self, r, g, b):
-        self.r = max(0, min(255, int(r)))
-        self.g = max(0, min(255, int(g)))
-        self.b = max(0, min(255, int(b)))
+        self.r = self.clamp(0, int(r), 255)
+        self.g = self.clamp(0, int(g), 255)
+        self.b = self.clamp(0, int(b), 255)
 
     def aslist(self):
         return [self.r, self.g, self.b]
+
+    def __iter__(self):
+        return iter(self.aslist())
+
+    def __add__(self, other):
+        return self._operation(other, '+')
+
+    def __mul__(self, other):
+        return self._operation(other, '*')
+
+    def __div__(self, other):
+        return self._operation(other, '/')
+
+    def __sub__(self, other):
+        return self._operation(other, '-')
+
+    def _operation(self, other, operator):
+        if isinstance(other, (int, float, long)):
+            r = eval('self.r {} other'.format(operator))
+            g = eval('self.g {} other'.format(operator))
+            b = eval('self.b {} other'.format(operator))
+            return self.__class__(r, g, b)
+        elif isinstance(other, Color):
+            r = eval('self.r {} other.r'.format(operator))
+            g = eval('self.g {} other.g'.format(operator))
+            b = eval('self.b {} other.b'.format(operator))
+            return self.__class__(r, g, b)
+        raise TypeError(
+            'cannot do \'{}\' {} \'{}\''.format(
+                str(self.__class__),
+                operator,
+                str(type(other)),
+            )
+        )

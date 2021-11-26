@@ -2,6 +2,20 @@ from . import RParam
 from maya import cmds
 
 
+def createBuffer(obj, bufferSuffix='Buffer'):
+    buffer_ = cmds.group(empty=True, name='{}{}'.format(obj, bufferSuffix))
+    objMatrix = cmds.xform(obj, q=True, matrix=True, worldSpace=True)
+    cmds.xform(buffer_, matrix=objMatrix)
+
+    objParents = cmds.listRelatives(obj, parent=True)
+
+    cmds.parent(obj, buffer_)
+    if objParents:
+        cmds.parent(buffer_, objParents[0])
+
+    return buffer_
+
+
 class Controller(object):
 
     def __init__(self, name):
@@ -18,14 +32,14 @@ class Controller(object):
             cls,
             name='ctrl#',
             color=RParam.Color(0, 0, 255),
-            radius=1.0,
-            normalVector=RParam.Vector3(1.0, 0.0, 0.0),
+            normal=RParam.Vector3(1.0, 0.0, 0.0),
+            size=1.0,
     ):
         name, = cmds.circle(
             name=name,
             constructionHistory=False,
-            radius=radius,
-            normal=normalVector.aslist()
+            radius=size,
+            normal=normal.aslist(),
         )
 
         cmds.controller(name)
