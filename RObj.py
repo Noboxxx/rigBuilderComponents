@@ -3,6 +3,7 @@ from maya import cmds
 
 
 def createMatrixConstraint(parents, child, interface=None):
+    return cmds.parentConstraint(parents, child, mo=True)
     if interface is None:
         interface = child
 
@@ -63,6 +64,7 @@ class Controller(object):
             normal=RParam.Vector3(1.0, 0.0, 0.0),
             size=1.0,
     ):
+        color = RParam.Color(*color)
         name, = cmds.circle(
             name=name,
             constructionHistory=False,
