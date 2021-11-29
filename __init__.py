@@ -1,6 +1,23 @@
 import rigBuilder
 from maya import cmds
-from . import RParam, RObj
+from . import RParam, RObj, RData
+
+
+class RMayaRig(rigBuilder.RBaseRig):
+    defaultName = 'rig'
+
+    def __init__(self, name=None):
+        super(RMayaRig, self).__init__()
+        self.name = str(name) if name is not None else self.defaultName
+        self.folder = None
+
+    def create(self):
+        self.folder = cmds.group(empty=True, name=self.name)
+
+        super(RMayaRig, self).create()
+
+        for component in self.components:
+            cmds.parent(component.folder, self.folder)
 
 
 class RMayaComponent(rigBuilder.RBaseComponent):
@@ -210,44 +227,95 @@ class RBaseComponent(RMayaComponent):
         self.skinJoints.append(localJoint)
 
 
-class RMayaRig(rigBuilder.RBaseRig):
-    defaultName = 'rig'
+class RFkChainComponent(RMayaComponent):
 
-    def __init__(self, name=None):
-        super(RMayaRig, self).__init__()
-        self.name = str(name) if name is not None else self.defaultName
-        self.folder = None
+    defaultMatrices = (
+        RParam.Matrix(
+            xx=0.0, xy=1.0, xz=0.0,
+            yx=0.0, yy=0.0, yz=1.0,
+            zx=1.0, zy=0.0, zz=0.0,
+            px=0.0, py=0.0, pz=0.0,
+        ),
+        RParam.Matrix(
+            xx=0.0, xy=1.0, xz=0.0,
+            yx=0.0, yy=0.0, yz=1.0,
+            zx=1.0, zy=0.0, zz=0.0,
+            px=0.0, py=1.0, pz=0.0,
+        ),
+        RParam.Matrix(
+            xx=0.0, xy=1.0, xz=0.0,
+            yx=0.0, yy=0.0, yz=1.0,
+            zx=1.0, zy=0.0, zz=0.0,
+            px=0.0, py=2.0, pz=0.0,
+        ),
+    )
 
-    def create(self):
-        self.folder = cmds.group(empty=True, name=self.name)
+    def __init__(self, matrices=None, **kwargs):
+        super(RFkChainComponent, self).__init__(**kwargs)
 
-        super(RMayaRig, self).create()
+        self.matrices = [RParam.Matrix(*m) for m in matrices] if matrices is not None else self.defaultMatrices
 
-        for component in self.components:
-            cmds.parent(component.folder, self.folder)
+        chain = list()
+        for index, matrix in enumerate(self.matrices):
+            ctrl = RObj.Controller.create(
+                name=self.composeObjName(objType='ctrl', nameExtra=index),
+                color=self.ctrlColor,
+                normal=self.ctrlNormal,
+                size=self.ctrlSize,
+            )
+            ctrlBuffer = RObj.createBuffer(ctrl)
+            cmds.xform(ctrlBuffer, matrix=matrix.aslist())
+            if index > 0:
+                cmds.parent(ctrlBuffer, chain[-1])
+            chain.append(ctrl)
+
+    def asdict(self):  # type: () -> dict
+        data = super(RFkChainComponent, self).asdict()
+        data['matrices'] = self.matrices
+        return data
+
+    def asmirroreddict(self, mirrorAxis='x'):  # type: (str) -> dict
+        data = super(RFkChainComponent, self).asmirroreddict()
+        matrices = data['matrices']
+        data['matrices'] = [matrix.mirrored(mirrorAxis=mirrorAxis) for matrix in matrices]
+        return data
 
 
 def test():
-    # clear maya
+    import os
+
+    # Clear maya
     cmds.file(new=True, force=True)
 
-    # matrices
-    ctrlMatrix = RParam.Matrix(
-        px=10, py=10, pz=10,
-        xx=0,  xy=0,  xz=-1,
-        yx=0,  yy=1,  yz=0,
-        zx=1,  zy=0,  zz=0
-    )
+    # Data path
+    dataPath = r'C:\Users\plaurent\Desktop'
 
-    # instantiate the components
+    # Fetch matrix data
+    matrixDataPath = os.path.join(dataPath, r'matrix.json')
+    matrixData = RData.MatrixFile(matrixDataPath).load()
+
+    # Matrices
+    ctrlMatrix = matrixData['ctrl']
+
+    # Instantiate the components
     baseComponent = RBaseComponent(ctrlSize=10)
-    l_ctrlComp = RCtrlComponent(side=RCtrlComponent.leftSide, matrix=ctrlMatrix)
+    l_ctrlComp = RCtrlComponent(side=RMayaComponent.leftSide, matrix=ctrlMatrix)
     r_ctrlComp = l_ctrlComp.mirrored()
+    l_chainComp = RFkChainComponent(side=RMayaComponent.leftSide)
+    r_chainComp = l_chainComp.mirrored()
 
     # Create the rig
     rig = RMayaRig()
-    rig.components += [baseComponent, l_ctrlComp, r_ctrlComp]
+    rig.components += [
+        baseComponent,
+        l_ctrlComp, r_ctrlComp,
+        l_chainComp, r_chainComp
+    ]
     rig.create()
+
+    # Connect components
+    RObj.createMatrixConstraint((baseComponent.outputs[1],), l_ctrlComp.inputs[0])
+    RObj.createMatrixConstraint((baseComponent.outputs[1],), r_ctrlComp.inputs[0])
 
     # clear sel
     cmds.select(clear=True)
