@@ -12,5 +12,6 @@ class MatrixFile(rigBuilder.JsonFile):
         self.dump(data, force=force)
 
     def import_(self):
-        for name, matrix in self.load():
-            cmds.spaceLocator(name=name, matrix=matrix)
+        for name, matrix in self.load().items():
+            locator = cmds.spaceLocator(name=name)
+            cmds.xform(locator, matrix=matrix)

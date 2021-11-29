@@ -3,6 +3,8 @@ from maya import cmds
 from . import RParam, RObj, RData
 
 
+# Base #
+
 class RMayaRig(rigBuilder.RBaseRig):
     defaultName = 'rig'
 
@@ -141,6 +143,9 @@ class RMayaComponent(rigBuilder.RBaseComponent):
         self._finalizeCreation()
 
 
+# Components #
+
+
 class RCtrlComponent(RMayaComponent):
 
     defaultName = 'ctrl'
@@ -255,19 +260,29 @@ class RFkChainComponent(RMayaComponent):
 
         self.matrices = [RParam.Matrix(*m) for m in matrices] if matrices is not None else self.defaultMatrices
 
-        chain = list()
+        ctrls = list()
         for index, matrix in enumerate(self.matrices):
             ctrl = RObj.Controller.create(
-                name=self.composeObjName(objType='ctrl', nameExtra=index),
+                name=self.composeObjName(objType=self.controllerTypeStr, nameExtra=index),
                 color=self.ctrlColor,
                 normal=self.ctrlNormal,
                 size=self.ctrlSize,
             )
+            skinJoint = cmds.joint(name=self.composeObjName(objType=self.skinJointTypeStr, nameExtra=index))
+            self.skinJoints.append(skinJoint)
+
             ctrlBuffer = RObj.createBuffer(ctrl)
             cmds.xform(ctrlBuffer, matrix=matrix.aslist())
+
             if index > 0:
-                cmds.parent(ctrlBuffer, chain[-1])
-            chain.append(ctrl)
+                cmds.parent(ctrlBuffer, ctrls[-1])
+            else:
+                self.inputs.append(ctrlBuffer)
+                self.rootDags.append(ctrlBuffer)
+            ctrls.append(ctrl)
+
+        self.controllers += ctrls
+        self.outputs += ctrls
 
     def asdict(self):  # type: () -> dict
         data = super(RFkChainComponent, self).asdict()
@@ -281,6 +296,9 @@ class RFkChainComponent(RMayaComponent):
         return data
 
 
+# test #
+
+
 def test():
     import os
 
@@ -292,16 +310,21 @@ def test():
 
     # Fetch matrix data
     matrixDataPath = os.path.join(dataPath, r'matrix.json')
-    matrixData = RData.MatrixFile(matrixDataPath).load()
+    matrixFile = RData.MatrixFile(matrixDataPath)
+    matrixData = matrixFile.load()
+
+    # Import guides
+    matrixFile.import_()
 
     # Matrices
     ctrlMatrix = matrixData['ctrl']
+    chainMatrices = matrixData['chain1'], matrixData['chain2'], matrixData['chain3']
 
     # Instantiate the components
     baseComponent = RBaseComponent(ctrlSize=10)
     l_ctrlComp = RCtrlComponent(side=RMayaComponent.leftSide, matrix=ctrlMatrix)
     r_ctrlComp = l_ctrlComp.mirrored()
-    l_chainComp = RFkChainComponent(side=RMayaComponent.leftSide)
+    l_chainComp = RFkChainComponent(matrices=chainMatrices, side=RMayaComponent.leftSide)
     r_chainComp = l_chainComp.mirrored()
 
     # Create the rig
