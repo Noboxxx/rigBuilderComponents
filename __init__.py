@@ -135,9 +135,6 @@ class RCtrlComponent(RMayaComponent):
 
         self.matrix = RParam.Matrix(*matrix) if matrix is not None else self.defaultMatrix
 
-        self.output = rigBuilder.ROutput()
-        self.input = rigBuilder.RInput()
-
     def _doCreation(self):
         ctrl = RObj.Controller.create(
             name=self.composeObjName(self.controllerTypeStr),
@@ -150,8 +147,8 @@ class RCtrlComponent(RMayaComponent):
 
         cmds.xform(ctrlBuffer, matrix=self.matrix.aslist())
 
-        self.input.obj = ctrlBuffer
-        self.output.obj = ctrl
+        self.inputs.append(ctrlBuffer)
+        self.outputs.append(ctrl)
 
         self.controllers.append(ctrl)
         self.skinJoints.append(joint)
@@ -178,13 +175,6 @@ class RBaseComponent(RMayaComponent):
     defaultName = 'base'
     defaultCtrlNormal = RParam.Vector3(0.0, 1.0, 0.0)
 
-    def __init__(self, **kwargs):
-        super(RBaseComponent, self).__init__(**kwargs)
-
-        self.worldOutput = rigBuilder.ROutput()
-        self.localOutput = rigBuilder.ROutput()
-        self.input = rigBuilder.RInput()
-
     def _doCreation(self):
         worldCtrl = RObj.Controller.create(
             name=self.composeObjName(nameExtra=self.worldName, objType=self.controllerTypeStr),
@@ -206,19 +196,15 @@ class RBaseComponent(RMayaComponent):
 
         cmds.parent(localBuffer, worldCtrl)
 
-        # self.inputs.append(worldBuffer)
-        self.input.obj = worldBuffer
+        self.inputs.append(worldBuffer)
 
         self.rootDags.append(worldBuffer)
 
         self.controllers.append(worldCtrl)
         self.controllers.append(localCtrl)
 
-        self.worldOutput.obj = worldCtrl
-        self.localOutput.obj = localCtrl
-
-        # self.outputs.append(worldCtrl)
-        # self.outputs.append(localCtrl)
+        self.outputs.append(worldCtrl)
+        self.outputs.append(localCtrl)
 
         self.skinJoints.append(worldJoint)
         self.skinJoints.append(localJoint)
@@ -242,6 +228,7 @@ class RMayaRig(rigBuilder.RBaseRig):
 
 
 def test():
+    # clear maya
     cmds.file(new=True, force=True)
 
     # matrices
@@ -255,23 +242,12 @@ def test():
     # instantiate the components
     baseComponent = RBaseComponent(ctrlSize=10)
     l_ctrlComp = RCtrlComponent(side=RCtrlComponent.leftSide, matrix=ctrlMatrix)
-
-    connections = Connections()
-
-    # register connections
-    baseComponent.worldOutput.connect(l_ctrlComp.input)
-
-    # r_ctrlComp = l_ctrlComp.mirrored()
+    r_ctrlComp = l_ctrlComp.mirrored()
 
     # Create the rig
     rig = RMayaRig()
-    # rig.components += [baseComponent, l_ctrlComp, r_ctrlComp]
-    rig.components += [baseComponent, l_ctrlComp]
+    rig.components += [baseComponent, l_ctrlComp, r_ctrlComp]
     rig.create()
-
-    # connections
-    # r_ctrlComp.output.connect(baseComponent.input)
-    # l_ctrlComp.output.connect(baseComponent.input)
 
     # clear sel
     cmds.select(clear=True)
