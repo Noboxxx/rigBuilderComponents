@@ -68,6 +68,9 @@ class RMayaComponent(RBuild.RBaseComponent):
         self.rootDags = list()
         self.skinJoints = list()
 
+        # create
+        self.create()
+
     def composeObjName(self, objType, nameExtra=None):
         name = '{}_{}'.format(self.name, nameExtra) if nameExtra is not None else self.name
         return Config.objNamePattern.format(
@@ -136,9 +139,9 @@ class RCtrlComponent(RMayaComponent):
 
     def __init__(self, matrix=None, **kwargs):
         # type: (RParam.Matrix, ...) -> None
-        super(RCtrlComponent, self).__init__(**kwargs)
 
         self.matrix = RParam.Matrix(*RBuild.get(matrix, self.defaultMatrix))
+        super(RCtrlComponent, self).__init__(**kwargs)
 
     def _doCreation(self):
         ctrl = RObj.Controller.create(
@@ -194,7 +197,7 @@ class RBaseComponent(RMayaComponent):
             name=self.composeObjName(nameExtra='local', objType=Config.controllerTypeStr),
             color=self.ctrlColor + 100,
             normal=self.ctrlNormal,
-            size=self.ctrlSize * .9,
+            size=self.ctrlSize * .8,
         )
         localJoint = cmds.joint(name=self.composeObjName(nameExtra='local', objType=Config.skinJointTypeStr))
         localBuffer = RObj.createBuffer(localCtrl)

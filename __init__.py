@@ -16,7 +16,7 @@ def test():
     matrixData = matrixFile.load()
 
     # # Import guides
-    # matrixFile.import_()
+    matrixFile.import_()
 
     # Matrices
     ctrlMatrix = matrixData['ctrl']
