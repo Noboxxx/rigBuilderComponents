@@ -7,22 +7,18 @@ class RRig(object):
 
     defaultName = 'rig'
 
-    def __init__(self, name=None, matrixData=None):
-        self.components = list()
-        self.connections = list()
+    def __init__(self, name=None, components=None, connections=None):
+        self.components = list(RBuild.get(components, list()))
+        self.connections = list(RBuild.get(connections, list()))
 
         self.name = str(RBuild.get(name, self.defaultName))
-        self.matrixData = dict(RBuild.get(matrixData, dict()))
 
         self.folder = None
 
-    def _initializeCreation(self):
+    def create(self):
+        # create folder
         self.folder = cmds.group(name=self.name, empty=True)
 
-    def _doCreation(self):
-        pass
-
-    def _finalizeCreation(self):
         # Create and parent components
         for component in self.components:
             component.create()
@@ -30,18 +26,13 @@ class RRig(object):
 
         # Connect components
         for parentComponent, inputIndex, childComponent, outputIndex in self.connections:
-            RObj.createMatrixConstraint((parentComponent.outputs[inputIndex],), childComponent.inputs[outputIndex])
-
-    def create(self):
-        self._initializeCreation()
-        self._doCreation()
-        self._finalizeCreation()
-
-
-class RBaseRig(RRig):
-
-    def __init__(self, **kwargs):
-        super(RBaseRig, self).__init__(**kwargs)
-
-        self.baseComponent = RComp.RBaseComponent()
-        self.components.append(self.baseComponent)
+            try:
+                RObj.createMatrixConstraint((parentComponent.outputs[inputIndex],), childComponent.inputs[outputIndex])
+            except IndexError:
+                msg = 'impossible to make the connection: {}.outputs[{}] -> {}.inputs[{}]'.format(
+                    parentComponent.folder,
+                    inputIndex,
+                    childComponent.folder,
+                    outputIndex
+                )
+                raise IndexError(msg)
